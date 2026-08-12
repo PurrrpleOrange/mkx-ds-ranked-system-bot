@@ -8,6 +8,7 @@ import com.mkx.ranked.repository.MatchRepository;
 import com.mkx.ranked.repository.PlayerRepository;
 import com.mkx.ranked.service.SeasonService;
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.components.label.Label;
@@ -26,6 +27,7 @@ import org.slf4j.LoggerFactory;
 
 import java.awt.Color;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -45,6 +47,9 @@ public class RankedCommandListener extends ListenerAdapter {
     private final PlayerRepository playerRepository = new PlayerRepository();
     private final MatchRepository matchRepository = new MatchRepository();
     private final SeasonService seasonService = new SeasonService();
+
+
+
 
     /**
      * Обработчик вызова слэш-команд Discord.
@@ -71,6 +76,9 @@ public class RankedCommandListener extends ListenerAdapter {
         showRankedMenu(event);
     }
 
+
+
+
     /**
      * Отправляет незарегистрированному пользователю модальное окно для первичного ввода его игрового ника[cite: 61, 307].
      * <p>
@@ -80,6 +88,9 @@ public class RankedCommandListener extends ListenerAdapter {
      *
      * @param event Событие вызова слэш-команды Discord
      */
+
+
+
 
     private void openRegistrationModal(SlashCommandInteractionEvent event) {
         TextInput nickInput = TextInput.create("input:reg_nickname", TextInputStyle.SHORT)
@@ -138,6 +149,24 @@ public class RankedCommandListener extends ListenerAdapter {
             Button reportBtn = Button.primary("btn:report_match", "📝 Внести результат");
             Button historyBtn = Button.secondary("btn:match_history", "📜 История матчей");
             Button topBtn = Button.secondary("btn:leaderboard", "📊 Топ игроков");
+            Button adminRatingBtn = Button.primary("btn:admin_send_rating", "📢 Отправить актуальный рейтинг");
+
+
+            if(event.getMember() != null &&
+            event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+
+                event.replyEmbeds(embed.build())
+                        .setComponents(
+                                ActionRow.of(reportBtn, historyBtn, topBtn),
+                                ActionRow.of(adminRatingBtn)
+                        )
+                        .setEphemeral(true)
+                        .queue();
+
+                log.info("DISCORD: Персональное меню /ranked отправлено администратору {}", player.getDisplayName());
+
+                return;
+            }
 
             event.replyEmbeds(embed.build())
                     .setComponents(ActionRow.of(reportBtn, historyBtn, topBtn))
@@ -156,6 +185,9 @@ public class RankedCommandListener extends ListenerAdapter {
                     .queue();
         }
     }
+
+
+
 
     /**
      * Обработчик отправки модального окна регистрации.
@@ -276,6 +308,11 @@ public class RankedCommandListener extends ListenerAdapter {
             return;
         }
 
+        if(componentId.equals("btn:admin_send_rating")) {
+            handleAdminSendRating(event);
+            return;
+        }
+
         // Переключение страниц истории матчей
         if (componentId.startsWith("btn:history_page:")) {
             int targetPage = Integer.parseInt(componentId.replace("btn:history_page:", ""));
@@ -289,6 +326,115 @@ public class RankedCommandListener extends ListenerAdapter {
             case "btn:report_match" -> handleReportMatchButton(event);
         }
     }
+
+
+
+
+    private void handleAdminSendRating(ButtonInteractionEvent event) {
+
+        if (event.getMember() == null ||
+                !event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
+
+            event.reply("❌ Кнопка доступна только администраторам.")
+                    .setEphemeral(true)
+                    .queue();
+
+            return;
+        }
+
+        try {
+            List<PlayerEntity> players = playerRepository.getAllPlayersSorted();
+
+            StringBuilder message = new StringBuilder();
+            message.append("**АКТУАЛЬНЫЙ РЕЙТИНГ ТРЕТЬЕГО СЕЗОНА!**\n\n");
+
+            int place = 1;
+
+            for (PlayerEntity player : players) {
+
+                message.append(String.format(
+                        "%d. %s – %d    (%d %s)%n",
+                        place++,
+                        player.getDisplayName(),
+                        player.getRating(),
+                        player.getGamesPlayed(),
+                        getGamesWord(player.getGamesPlayed())
+                ));
+            }
+
+            event.deferEdit().queue();
+
+            List<String> chunks = splitMessage(message.toString(), 1900);
+
+            for (String chunk : chunks) {
+                event.getChannel()
+                        .sendMessage(chunk)
+                        .queue();
+            }
+
+        } catch (Exception e) {
+            log.error("ADMIN: Ошибка при отправке актуального рейтинга", e);
+
+            event.getHook()
+                    .sendMessage("❌ Не удалось отправить актуальный рейтинг.")
+                    .setEphemeral(true)
+                    .queue();
+        }
+    }
+
+
+    /***
+     * Вспомогательный метод для определения падежа слова "игра" в методе handleAdminSendRating()
+     * @param games
+     * @return
+     */
+    private String getGamesWord(int games) {
+        int lastTwoDigits = games % 100;
+
+        if (lastTwoDigits >= 11 && lastTwoDigits <= 14) {
+            return "игр";
+        }
+
+        return switch (games % 10) {
+            case 1 -> "игра";
+            case 2, 3, 4 -> "игры";
+            default -> "игр";
+        };
+    }
+
+
+
+
+    /***
+     * Вспомогательный метод разбивки строки для handleAdminSendRating()
+     * @param message
+     * @param maxLength
+     * @return
+     */
+    private List<String> splitMessage(String message, int maxLength) {
+
+        List<String> chunks = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+
+        for (String line : message.split("\n")) {
+
+            if (current.length() + line.length() + 1 > maxLength) {
+                chunks.add(current.toString());
+                current.setLength(0);
+            }
+
+            current.append(line).append("\n");
+        }
+
+        if (!current.isEmpty()) {
+            chunks.add(current.toString());
+        }
+
+        return chunks;
+    }
+
+
+
 
     /**
      * Рендерит и отправляет/обновляет интерактивное Embed-сообщение с историей сыгранных матчей[cite: 92, 93, 338, 339].
@@ -306,6 +452,8 @@ public class RankedCommandListener extends ListenerAdapter {
     private void handleMatchHistoryPage(ButtonInteractionEvent event) {
         handleMatchHistoryPage(event, 0, false);
     }
+
+
 
 
     /**
@@ -659,6 +807,8 @@ public class RankedCommandListener extends ListenerAdapter {
     }
 
 
+
+
     /**
      * Обработчик взаимодействия с выпадающим меню выбора пользователя[cite: 1191].
      * <p>
@@ -703,6 +853,9 @@ public class RankedCommandListener extends ListenerAdapter {
             event.replyModal(modal).queue(); // Открываем форму
         }
     }
+
+
+
 
     /**
      * Вспомогательный метод для форматирования даты и времени в стандарт динамических таймстемпов Discord.
