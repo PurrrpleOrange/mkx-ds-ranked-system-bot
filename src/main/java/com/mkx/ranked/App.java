@@ -47,7 +47,6 @@ public class App {
             System.exit(1);
         }
 
-        // !!!!!!!!!!!!!!!!!!!!!!!! 2. Потом убрать отсюда !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         String botToken = System.getenv("DISCORD_TOKEN");
 
         try {
