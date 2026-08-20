@@ -10,14 +10,22 @@ import org.hibernate.Transaction;
 import org.hibernate.query.Query;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Service
 public class SeasonService {
 
-    private static final Logger log = LoggerFactory.getLogger(SeasonService.class);
-    private final PlayerRepository playerRepository = new PlayerRepository();
+    private static final Logger log =
+            LoggerFactory.getLogger(SeasonService.class);
+
+    private final PlayerRepository playerRepository;
+
+    public SeasonService(PlayerRepository playerRepository) {
+        this.playerRepository = playerRepository;
+    }
 
     /**
      * Получает текущий активный сезон.

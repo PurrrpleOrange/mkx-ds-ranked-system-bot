@@ -9,6 +9,7 @@ import org.hibernate.Session;
 import org.hibernate.Transaction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
 import java.util.Optional;
 
@@ -22,10 +23,15 @@ import java.util.Optional;
  * @author MKX Ranked Bot Team
  * @version 1.2
  */
+@Service
 public class MatchService {
 
     private static final Logger log = LoggerFactory.getLogger(MatchService.class);
-    private final PlayerRepository playerRepository = new PlayerRepository();
+    private final PlayerRepository playerRepository;
+
+    public MatchService(PlayerRepository playerRepository) {
+        this.playerRepository = playerRepository;
+    }
 
     /**
      * Проведение FT5 сета, перерасчет MMR очков и запись результатов матча в историю.

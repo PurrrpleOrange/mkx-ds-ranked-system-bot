@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: mkx-ranked-postgres
+    environment:
+      POSTGRES_DB: mkx_ranked
+      POSTGRES_USER: mkx
+      POSTGRES_PASSWORD: mkx
+    ports:
+      - "5433:5432"
+    volumes:
+      - mkx_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  mkx_postgres_data:

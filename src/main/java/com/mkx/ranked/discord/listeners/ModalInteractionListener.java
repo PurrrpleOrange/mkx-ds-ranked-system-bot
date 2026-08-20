@@ -10,6 +10,7 @@ import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.interactions.modals.ModalMapping;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 import java.awt.Color;
 import java.util.Optional;
@@ -17,6 +18,7 @@ import java.util.Optional;
 /**
  * Слушатель модальных окон для обработки внесения результатов матчей FT5.
  */
+@Component
 public class ModalInteractionListener extends ListenerAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(ModalInteractionListener.class);

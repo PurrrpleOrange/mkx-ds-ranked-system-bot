@@ -7,6 +7,11 @@ import org.hibernate.Transaction;
 import org.hibernate.query.Query;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Repository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -21,9 +26,14 @@ import java.util.Optional;
  * @author MKX Ranked Bot Team
  * @version 1.3
  */
+@Repository
 public class PlayerRepository {
 
-    private static final Logger log = LoggerFactory.getLogger(PlayerRepository.class);
+    private static final Logger log =
+            LoggerFactory.getLogger(PlayerRepository.class);
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
 
 
@@ -34,14 +44,21 @@ public class PlayerRepository {
      * @return {@link Optional}, содержащий {@link PlayerEntity}, если игрок найден, или пустой {@link Optional}
      */
     public Optional<PlayerEntity> findById(Long discordId) {
-        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
-            PlayerEntity player = session.get(PlayerEntity.class, discordId);
-            return Optional.ofNullable(player);
-        } catch (Exception e) {
-            log.error("DB ERROR: Ошибка при поиске игрока findById={}", discordId, e);
-            return Optional.empty();
-        }
+        PlayerEntity player = entityManager.find(PlayerEntity.class, discordId);
+        return Optional.ofNullable(player);
     }
+
+
+
+//    public Optional<PlayerEntity> findById(Long discordId) {
+//        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
+//            PlayerEntity player = session.get(PlayerEntity.class, discordId);
+//            return Optional.ofNullable(player);
+//        } catch (Exception e) {
+//            log.error("DB ERROR: Ошибка при поиске игрока findById={}", discordId, e);
+//            return Optional.empty();
+//        }
+//    }
 
 
 
@@ -54,16 +71,29 @@ public class PlayerRepository {
      * @return {@link Optional}, содержащий {@link PlayerEntity} с discord_id < 0, если профиль найден
      */
     public Optional<PlayerEntity> findUnclaimedByNickname(String nickname) {
-        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
-            String hql = "FROM PlayerEntity p WHERE LOWER(p.displayName) = LOWER(:nickname) AND p.discordId < 0";
-            Query<PlayerEntity> query = session.createQuery(hql, PlayerEntity.class);
-            query.setParameter("nickname", nickname.trim());
-            return query.uniqueResultOptional();
-        } catch (Exception e) {
-            log.error("DB ERROR: Ошибка при поиске unclaimed профиля по нику='{}'", nickname, e);
-            return Optional.empty();
-        }
+        return entityManager.createQuery("""
+                    FROM PlayerEntity p
+                    WHERE LOWER(p.displayName) = LOWER(:nickname)
+                      AND p.discordId < 0
+                    """, PlayerEntity.class)
+                .setParameter("nickname", nickname.trim())
+                .getResultStream()
+                .findFirst();
     }
+
+
+
+    //    public Optional<PlayerEntity> findUnclaimedByNickname(String nickname) {
+//        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
+//            String hql = "FROM PlayerEntity p WHERE LOWER(p.displayName) = LOWER(:nickname) AND p.discordId < 0";
+//            Query<PlayerEntity> query = session.createQuery(hql, PlayerEntity.class);
+//            query.setParameter("nickname", nickname.trim());
+//            return query.uniqueResultOptional();
+//        } catch (Exception e) {
+//            log.error("DB ERROR: Ошибка при поиске unclaimed профиля по нику='{}'", nickname, e);
+//            return Optional.empty();
+//        }
+//    }
 
 
 
@@ -75,16 +105,31 @@ public class PlayerRepository {
      * @return {@code true}, если игровой ник уже привязан к пользователю с discord_id > 0, иначе {@code false}
      */
     public boolean isDisplayNameTaken(String nickname) {
-        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
-            String hql = "SELECT COUNT(p) FROM PlayerEntity p WHERE LOWER(p.displayName) = LOWER(:nickname) AND p.discordId > 0";
-            Query<Long> query = session.createQuery(hql, Long.class);
-            query.setParameter("nickname", nickname.trim());
-            return query.getSingleResult() > 0;
-        } catch (Exception e) {
-            log.error("DB ERROR: Ошибка проверки уникальности ника='{}'", nickname, e);
-            return false;
-        }
+        Long count = entityManager.createQuery("""
+                    SELECT COUNT(p)
+                    FROM PlayerEntity p
+                    WHERE LOWER(p.displayName) = LOWER(:nickname)
+                      AND p.discordId > 0
+                    """, Long.class)
+                .setParameter("nickname", nickname.trim())
+                .getSingleResult();
+
+        return count > 0;
     }
+
+
+
+    //    public boolean isDisplayNameTaken(String nickname) {
+//        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
+//            String hql = "SELECT COUNT(p) FROM PlayerEntity p WHERE LOWER(p.displayName) = LOWER(:nickname) AND p.discordId > 0";
+//            Query<Long> query = session.createQuery(hql, Long.class);
+//            query.setParameter("nickname", nickname.trim());
+//            return query.getSingleResult() > 0;
+//        } catch (Exception e) {
+//            log.error("DB ERROR: Ошибка проверки уникальности ника='{}'", nickname, e);
+//            return false;
+//        }
+//    }
 
 
 
@@ -95,19 +140,28 @@ public class PlayerRepository {
      * @return количество игроков
      */
     public long countAllPlayers() {
-        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
-
-            String hql = "SELECT COUNT(p) FROM PlayerEntity p";
-
-            return session
-                    .createQuery(hql, Long.class)
-                    .getSingleResult();
-
-        } catch (Exception e) {
-            log.error("DB ERROR: Ошибка при подсчёте игроков", e);
-            throw e;
-        }
+        return entityManager.createQuery(
+                "SELECT COUNT(p) FROM PlayerEntity p",
+                Long.class
+        ).getSingleResult();
     }
+
+
+
+    //    public long countAllPlayers() {
+//        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
+//
+//            String hql = "SELECT COUNT(p) FROM PlayerEntity p";
+//
+//            return session
+//                    .createQuery(hql, Long.class)
+//                    .getSingleResult();
+//
+//        } catch (Exception e) {
+//            log.error("DB ERROR: Ошибка при подсчёте игроков", e);
+//            throw e;
+//        }
+//    }
 
 
 
@@ -131,32 +185,52 @@ public class PlayerRepository {
             throw new IllegalArgumentException("pageSize должен быть больше 0");
         }
 
-        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
-
-            String hql = """
-                FROM PlayerEntity
-                ORDER BY rating DESC, gamesPlayed DESC
-                """;
-
-            Query<PlayerEntity> query =
-                    session.createQuery(hql, PlayerEntity.class);
-
-            query.setFirstResult(page * pageSize);
-            query.setMaxResults(pageSize);
-
-            return query.getResultList();
-
-        } catch (Exception e) {
-            log.error(
-                    "DB ERROR: Ошибка при получении страницы игроков. page={}, pageSize={}",
-                    page,
-                    pageSize,
-                    e
-            );
-
-            throw e;
-        }
+        return entityManager.createQuery("""
+                    FROM PlayerEntity
+                    ORDER BY rating DESC, gamesPlayed DESC
+                    """, PlayerEntity.class)
+                .setFirstResult(page * pageSize)
+                .setMaxResults(pageSize)
+                .getResultList();
     }
+
+
+
+//    public List<PlayerEntity> getPlayersPaged(int page, int pageSize) {
+//        if (page < 0) {
+//            throw new IllegalArgumentException("page не может быть отрицательным");
+//        }
+//
+//        if (pageSize <= 0) {
+//            throw new IllegalArgumentException("pageSize должен быть больше 0");
+//        }
+//
+//        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
+//
+//            String hql = """
+//                FROM PlayerEntity
+//                ORDER BY rating DESC, gamesPlayed DESC
+//                """;
+//
+//            Query<PlayerEntity> query =
+//                    session.createQuery(hql, PlayerEntity.class);
+//
+//            query.setFirstResult(page * pageSize);
+//            query.setMaxResults(pageSize);
+//
+//            return query.getResultList();
+//
+//        } catch (Exception e) {
+//            log.error(
+//                    "DB ERROR: Ошибка при получении страницы игроков. page={}, pageSize={}",
+//                    page,
+//                    pageSize,
+//                    e
+//            );
+//
+//            throw e;
+//        }
+//    }
 
 
 
@@ -173,44 +247,94 @@ public class PlayerRepository {
      * @param negativeId Временный отрицательный ID импортированного профиля
      * @return {@code true}, если привязка прошла успешно; {@code false} в случае ошибки или отката транзакции
      */
-    public boolean claimProfileByNegativeId(Long actualDiscordId, String actualUsername, Long negativeId) {
-        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
-            Transaction tx = session.beginTransaction();
+    @Transactional
+    public boolean claimProfileByNegativeId(
+            Long actualDiscordId,
+            String actualUsername,
+            Long negativeId
+    ) {
+        PlayerEntity unclaimed = entityManager.find(PlayerEntity.class, negativeId);
 
-            PlayerEntity unclaimed = session.get(PlayerEntity.class, negativeId);
-            if (unclaimed == null || unclaimed.getDiscordId() >= 0) {
-                log.warn("CLAIM WARN: Профиль с oldId={} не существует или уже привязан", negativeId);
-                tx.rollback();
-                return false;
-            }
-
-            String mkNickname = unclaimed.getDisplayName();
-
-            // 1. Атомарно обновляем discord_id и username в таблице players
-            String updatePlayersSql = "UPDATE players SET discord_id = :newId, username = :username WHERE discord_id = :oldId";
-            session.createNativeQuery(updatePlayersSql, Integer.class)
-                    .setParameter("newId", actualDiscordId)
-                    .setParameter("username", actualUsername)
-                    .setParameter("oldId", negativeId)
-                    .executeUpdate();
-
-            // 2. Обновляем discord_id в Зале Славы (season_history)
-            String updateHistorySql = "UPDATE season_history SET discord_id = :newId " +
-                    "WHERE LOWER(mk_nickname) = LOWER(:nickname) AND (discord_id = 0 OR discord_id = :oldId)";
-            session.createNativeQuery(updateHistorySql, Integer.class)
-                    .setParameter("newId", actualDiscordId)
-                    .setParameter("nickname", mkNickname.trim())
-                    .setParameter("oldId", negativeId)
-                    .executeUpdate();
-
-            tx.commit();
-            log.info("CLAIM SUCCESS: Профиль '{}' (old_id={}) привязан к discordId={}", mkNickname, negativeId, actualDiscordId);
-            return true;
-        } catch (Exception e) {
-            log.error("DB ERROR: Ошибка при claimProfileByNegativeId (old_id={})", negativeId, e);
+        if (unclaimed == null || unclaimed.getDiscordId() >= 0) {
+            log.warn("CLAIM WARN: Профиль с oldId={} не существует или уже привязан", negativeId);
             return false;
         }
+
+        String mkNickname = unclaimed.getDisplayName();
+
+        int updated = entityManager.createNativeQuery("""
+                    UPDATE players
+                    SET discord_id = :newId, username = :username
+                    WHERE discord_id = :oldId
+                    """)
+                .setParameter("newId", actualDiscordId)
+                .setParameter("username", actualUsername)
+                .setParameter("oldId", negativeId)
+                .executeUpdate();
+
+        if (updated == 0) {
+            return false;
+        }
+
+        entityManager.createNativeQuery("""
+                    UPDATE season_history
+                    SET discord_id = :newId
+                    WHERE LOWER(mk_nickname) = LOWER(:nickname)
+                      AND (discord_id = 0 OR discord_id = :oldId)
+                    """)
+                .setParameter("newId", actualDiscordId)
+                .setParameter("nickname", mkNickname.trim())
+                .setParameter("oldId", negativeId)
+                .executeUpdate();
+
+        log.info(
+                "CLAIM SUCCESS: Профиль '{}' (old_id={}) привязан к discordId={}",
+                mkNickname, negativeId, actualDiscordId
+        );
+
+        return true;
     }
+
+
+
+    //    public boolean claimProfileByNegativeId(Long actualDiscordId, String actualUsername, Long negativeId) {
+//        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
+//            Transaction tx = session.beginTransaction();
+//
+//            PlayerEntity unclaimed = session.get(PlayerEntity.class, negativeId);
+//            if (unclaimed == null || unclaimed.getDiscordId() >= 0) {
+//                log.warn("CLAIM WARN: Профиль с oldId={} не существует или уже привязан", negativeId);
+//                tx.rollback();
+//                return false;
+//            }
+//
+//            String mkNickname = unclaimed.getDisplayName();
+//
+//            // 1. Атомарно обновляем discord_id и username в таблице players
+//            String updatePlayersSql = "UPDATE players SET discord_id = :newId, username = :username WHERE discord_id = :oldId";
+//            session.createNativeQuery(updatePlayersSql, Integer.class)
+//                    .setParameter("newId", actualDiscordId)
+//                    .setParameter("username", actualUsername)
+//                    .setParameter("oldId", negativeId)
+//                    .executeUpdate();
+//
+//            // 2. Обновляем discord_id в Зале Славы (season_history)
+//            String updateHistorySql = "UPDATE season_history SET discord_id = :newId " +
+//                    "WHERE LOWER(mk_nickname) = LOWER(:nickname) AND (discord_id = 0 OR discord_id = :oldId)";
+//            session.createNativeQuery(updateHistorySql, Integer.class)
+//                    .setParameter("newId", actualDiscordId)
+//                    .setParameter("nickname", mkNickname.trim())
+//                    .setParameter("oldId", negativeId)
+//                    .executeUpdate();
+//
+//            tx.commit();
+//            log.info("CLAIM SUCCESS: Профиль '{}' (old_id={}) привязан к discordId={}", mkNickname, negativeId, actualDiscordId);
+//            return true;
+//        } catch (Exception e) {
+//            log.error("DB ERROR: Ошибка при claimProfileByNegativeId (old_id={})", negativeId, e);
+//            return false;
+//        }
+//    }
 
 
 
@@ -223,6 +347,7 @@ public class PlayerRepository {
      * @param displayName Выбранный игровой никнейм
      * @return Созданная сущность {@link PlayerEntity}
      */
+    @Transactional
     public PlayerEntity createNewPlayer(Long discordId, String username, String displayName) {
         try (Session session = DatabaseManager.getSessionFactory().openSession()) {
             Transaction tx = session.beginTransaction();

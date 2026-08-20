@@ -7,12 +7,14 @@ import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 import java.awt.Color;
 
 /**
  * Слушатель публичных кнопок подтверждения и отклонения результатов матчей FT5.
  */
+@Component
 public class MatchConfirmationListener extends ListenerAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(MatchConfirmationListener.class);

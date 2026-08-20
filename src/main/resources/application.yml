@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/mkx_ranked
+    username: mkx
+    password: mkx
+
+  jpa:
+    hibernate:
+      ddl-auto: create
+    open-in-view: false
+
+discord:
+  token: ${DISCORD_TOKEN}

@@ -24,6 +24,7 @@ import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.modals.Modal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 import java.awt.Color;
 import java.time.ZoneId;
@@ -41,14 +42,25 @@ import java.util.Optional;
  * @author MKX Ranked Bot Team
  * @version 1.3
  */
+@Component
 public class RankedCommandListener extends ListenerAdapter {
 
-    private static final Logger log = LoggerFactory.getLogger(RankedCommandListener.class);
-    private final PlayerRepository playerRepository = new PlayerRepository();
-    private final MatchRepository matchRepository = new MatchRepository();
-    private final SeasonService seasonService = new SeasonService();
+        private static final Logger log =
+                LoggerFactory.getLogger(RankedCommandListener.class);
 
+        private final PlayerRepository playerRepository;
+        private final MatchRepository matchRepository;
+        private final SeasonService seasonService;
 
+        public RankedCommandListener(
+                PlayerRepository playerRepository,
+                MatchRepository matchRepository,
+                SeasonService seasonService
+        ) {
+            this.playerRepository = playerRepository;
+            this.matchRepository = matchRepository;
+            this.seasonService = seasonService;
+        }
 
 
     /**
