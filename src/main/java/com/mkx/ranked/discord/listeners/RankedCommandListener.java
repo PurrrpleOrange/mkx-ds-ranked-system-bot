@@ -2,7 +2,7 @@ package com.mkx.ranked.discord.listeners;
 
 import com.mkx.ranked.model.MatchEntity;
 import com.mkx.ranked.model.PlayerEntity;
-import com.mkx.ranked.model.RankTier;
+import com.mkx.ranked.model.enums.RankTier;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.repository.MatchRepository;
 import com.mkx.ranked.repository.PlayerRepository;

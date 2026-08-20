@@ -3,7 +3,6 @@ package com.mkx.ranked.service;
 import com.mkx.ranked.config.DatabaseManager;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
-import com.mkx.ranked.model.SeasonHistoryEntity;
 import com.mkx.ranked.repository.PlayerRepository;
 import org.hibernate.Session;
 import org.hibernate.Transaction;

@@ -1,4 +1,4 @@
-package com.mkx.ranked.model;
+package com.mkx.ranked.model.enums;
 
 public enum RankTier {
     S_TIER("S-Tier", "🥇", 1, 10),
