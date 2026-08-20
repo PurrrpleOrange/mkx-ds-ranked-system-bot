@@ -43,3 +43,6 @@ build/
 
 # Local configuration
 application-local.properties
+
+*.backup
+*.backup.gz
