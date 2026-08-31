@@ -25,7 +25,7 @@ public interface SeasonPlayerRepository
             SeasonEntity season
     );
 
-    List<SeasonPlayerEntity> findAllByPlayerOrderBySeasonNumberDesc(
+    List<SeasonPlayerEntity> findAllByPlayerOrderBySeason_SeasonNumberDesc(
             PlayerEntity player
     );
 }

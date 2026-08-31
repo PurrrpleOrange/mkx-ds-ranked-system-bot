@@ -7,7 +7,7 @@ CREATE TABLE players (
 
 CREATE TABLE seasons (
                          id BIGSERIAL PRIMARY KEY,
-                         number INTEGER NOT NULL UNIQUE,
+                         season_number INTEGER NOT NULL UNIQUE,
                          name VARCHAR(100) NOT NULL,
                          status VARCHAR(20) NOT NULL,
                          start_date TIMESTAMP,
