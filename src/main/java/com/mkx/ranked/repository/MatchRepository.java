@@ -15,6 +15,8 @@ import java.util.List;
 
 public interface MatchRepository extends JpaRepository<MatchEntity, Long> {
 
+    long countBySeason(SeasonEntity season);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select m

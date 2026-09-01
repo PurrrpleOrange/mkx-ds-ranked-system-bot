@@ -2,6 +2,7 @@ package com.mkx.ranked.discord.formatter;
 
 import com.mkx.ranked.model.dto.AdminMatchDto;
 import com.mkx.ranked.model.dto.AdminPlayerDto;
+import com.mkx.ranked.model.dto.AdminSeasonStatisticsDto;
 import com.mkx.ranked.model.dto.LeaderboardEntryDto;
 import com.mkx.ranked.model.dto.SeasonDto;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -17,12 +18,68 @@ import java.util.List;
 @Component
 public class AdminMessageFormatter {
 
+    private static final Color INFORMATION_COLOR = new Color(0, 255, 200);
+    private static final int EMBED_DESCRIPTION_LIMIT = 3800;
     private static final int DISCORD_MESSAGE_CHUNK_SIZE = 1900;
+
+    public MessageEmbed adminMenu() {
+        return new EmbedBuilder()
+                .setTitle("Панель администратора MKX Ranked")
+                .setColor(INFORMATION_COLOR)
+                .setDescription("""
+                        Выберите раздел административной панели.
+
+                        **Опубликовать рейтинг** — отправить полный рейтинг в текущий канал.
+                        **Управление сезонами** — lifecycle, список, статистика и даты.
+                        **Управление матчами** — безопасный откат ошибочного матча.
+                        **Управление игроками** — статистика игрока ACTIVE сезона.
+                        """)
+                .build();
+    }
+
+    public MessageEmbed seasonManagementMenu() {
+        return new EmbedBuilder()
+                .setTitle("Управление сезонами")
+                .setColor(INFORMATION_COLOR)
+                .setDescription("""
+                        **Список сезонов** — номера, ID и статусы всех сезонов.
+                        **Создать сезон** — создать новый сезон в статусе CREATED.
+                        **Активировать сезон** — выполнить CREATED → ACTIVE и опубликовать объявление.
+                        **Завершить сезон** — завершить ACTIVE сезон, сохранить места и опубликовать объявление.
+                        **Посмотреть статистику сезона** — результаты завершённого сезона по ID или номеру.
+                        **Изменить информацию о сезоне** — изменить плановую дату окончания ACTIVE сезона.
+                        """)
+                .build();
+    }
+
+    public MessageEmbed matchManagementMenu() {
+        return new EmbedBuilder()
+                .setTitle("Управление матчами")
+                .setColor(INFORMATION_COLOR)
+                .setDescription("""
+                        **Удалить матч** — безопасно откатить матч ACTIVE сезона по ID.
+
+                        Операция восстановит rating и gamesPlayed обоих игроков, затем удалит запись матча. Матчи завершённых сезонов изменить нельзя.
+                        
+                        ID матча игрок может узнать из своей истории матчей.
+                        """)
+                .build();
+    }
+
+    public MessageEmbed playerManagementMenu() {
+        return new EmbedBuilder()
+                .setTitle("Управление игроками")
+                .setColor(INFORMATION_COLOR)
+                .setDescription("""
+                        **Посмотреть статистику игрока** — выбрать Discord-пользователя и показать профиль текущего ACTIVE сезона: рейтинг, игры, место и дивизион.
+                        """)
+                .build();
+    }
 
     public MessageEmbed seasonInfo(SeasonDto season) {
         return new EmbedBuilder()
                 .setTitle("Сезон #" + season.seasonNumber() + " — " + season.name())
-                .setColor(new Color(175, 0, 0))
+                .setColor(INFORMATION_COLOR)
                 .addField("ID", String.valueOf(season.id()), true)
                 .addField("Статус", season.status().name(), true)
                 .addField("Начало", formatDiscordTimestamp(season.startDate()), false)
@@ -31,10 +88,79 @@ public class AdminMessageFormatter {
                 .build();
     }
 
+    public MessageEmbed seasonActivatedAnnouncement(SeasonDto season) {
+        return new EmbedBuilder()
+                .setTitle("Новый рейтинговый сезон начался!")
+                .setColor(INFORMATION_COLOR)
+                .setDescription("""
+                        **Сезон #%d — %s** теперь активен.
+
+                        Регистрация выполняется заново для каждого сезона. Откройте `/ranked`, зарегистрируйте игровой ник и присоединяйтесь к матчам.
+
+                        **Плановое окончание:** %s
+                        """.formatted(
+                        season.seasonNumber(),
+                        season.name(),
+                        formatDiscordTimestamp(season.plannedEndDate())
+                ))
+                .setFooter("Удачи в новом рейтинговом сезоне!")
+                .build();
+    }
+
+    public MessageEmbed seasonFinishedAnnouncement(SeasonDto season) {
+        return new EmbedBuilder()
+                .setTitle("Рейтинговый сезон завершён")
+                .setColor(INFORMATION_COLOR)
+                .setDescription("""
+                        **Сезон #%d — %s** завершён.
+
+                        Итоговые места участников сохранены. Регистрация матчей этого сезона закрыта — ожидайте объявления о начале следующего сезона.
+
+                        **Дата завершения:** %s
+                        """.formatted(
+                        season.seasonNumber(),
+                        season.name(),
+                        formatDiscordTimestamp(season.endDate())
+                ))
+                .build();
+    }
+
+    public MessageEmbed previousSeasonStatistics(AdminSeasonStatisticsDto statistics) {
+        SeasonDto season = statistics.season();
+        StringBuilder top = new StringBuilder();
+        if (statistics.topPlayers().isEmpty()) {
+            top.append("В сезоне не было зарегистрированных игроков.");
+        } else {
+            for (LeaderboardEntryDto player : statistics.topPlayers()) {
+                top.append("**#")
+                        .append(player.rank())
+                        .append("** ")
+                        .append(player.displayName())
+                        .append(" — `")
+                        .append(player.rating())
+                        .append(" MMR` (игр: ")
+                        .append(player.gamesPlayed())
+                        .append(")\n");
+            }
+        }
+
+        return new EmbedBuilder()
+                .setTitle("Статистика сезона #" + season.seasonNumber())
+                .setColor(INFORMATION_COLOR)
+                .setDescription("**%s**\n\n**Топ-10 сезона**\n%s".formatted(season.name(), top))
+                .addField("ID", String.valueOf(season.id()), true)
+                .addField("Игроков", String.valueOf(statistics.playerCount()), true)
+                .addField("Матчей", String.valueOf(statistics.matchCount()), true)
+                .addField("Средний рейтинг", String.valueOf(statistics.averageRating()), true)
+                .addField("Начало", formatDiscordTimestamp(season.startDate()), false)
+                .addField("Окончание", formatDiscordTimestamp(season.endDate()), false)
+                .build();
+    }
+
     public MessageEmbed matchInfo(AdminMatchDto match) {
         return new EmbedBuilder()
                 .setTitle("Матч #" + match.matchId())
-                .setColor(Color.ORANGE)
+                .setColor(INFORMATION_COLOR)
                 .addField("Сезон", "#" + match.seasonNumber(), true)
                 .addField("Счёт", match.winnerScore() + ":" + match.loserScore(), true)
                 .addField(
@@ -64,7 +190,7 @@ public class AdminMessageFormatter {
     public MessageEmbed playerInfo(AdminPlayerDto player) {
         return new EmbedBuilder()
                 .setTitle("Игрок " + player.displayName())
-                .setColor(Color.CYAN)
+                .setColor(INFORMATION_COLOR)
                 .addField("Internal player ID", String.valueOf(player.playerId()), true)
                 .addField("Сезон", "#" + player.seasonNumber(), true)
                 .addField("Discord", "%s (<@%d>)".formatted(player.discordUsername(), player.discordId()), false)
@@ -74,6 +200,45 @@ public class AdminMessageFormatter {
                 .addField("Место", "#" + player.rank(), true)
                 .addField("Дивизион", player.tierEmoji() + " " + player.tierName(), true)
                 .build();
+    }
+
+    public List<MessageEmbed> seasonList(List<SeasonDto> seasons) {
+        List<String> descriptions = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+
+        if (seasons.isEmpty()) {
+            descriptions.add("Сезоны пока не созданы.");
+        } else {
+            for (SeasonDto season : seasons) {
+                String line = "**#%d** • ID: `%d` • `%s` — %s%n".formatted(
+                        season.seasonNumber(),
+                        season.id(),
+                        season.status().name(),
+                        season.name()
+                );
+                if (!current.isEmpty() && current.length() + line.length() > EMBED_DESCRIPTION_LIMIT) {
+                    descriptions.add(current.toString());
+                    current.setLength(0);
+                }
+                current.append(line);
+            }
+            if (!current.isEmpty()) {
+                descriptions.add(current.toString());
+            }
+        }
+
+        List<MessageEmbed> embeds = new ArrayList<>();
+        for (int i = 0; i < descriptions.size(); i++) {
+            String title = descriptions.size() == 1
+                    ? "Все рейтинговые сезоны"
+                    : "Все рейтинговые сезоны — %d/%d".formatted(i + 1, descriptions.size());
+            embeds.add(new EmbedBuilder()
+                    .setTitle(title)
+                    .setColor(INFORMATION_COLOR)
+                    .setDescription(descriptions.get(i))
+                    .build());
+        }
+        return embeds;
     }
 
     public List<String> fullLeaderboard(List<LeaderboardEntryDto> players) {

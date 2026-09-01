@@ -5,7 +5,6 @@ import com.mkx.ranked.discord.formatter.RankedMessageFormatter;
 import com.mkx.ranked.exception.BusinessException;
 import com.mkx.ranked.model.dto.LeaderboardEntryDto;
 import com.mkx.ranked.model.dto.MatchHistoryEntryDto;
-import com.mkx.ranked.model.dto.PageDto;
 import com.mkx.ranked.model.dto.PlayerProfileDto;
 import com.mkx.ranked.model.dto.RegistrationResultDto;
 import com.mkx.ranked.service.LeaderboardService;
@@ -30,13 +29,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Component
 public class RankedCommandListener extends ListenerAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(RankedCommandListener.class);
-    private static final int LEADERBOARD_PAGE_SIZE = 10;
-    private static final int MATCH_HISTORY_PAGE_SIZE = 5;
-
     private final PlayerService playerService;
     private final RegistrationService registrationService;
     private final LeaderboardService leaderboardService;
@@ -116,29 +114,9 @@ public class RankedCommandListener extends ListenerAdapter {
     public void onButtonInteraction(ButtonInteractionEvent event) {
         String componentId = event.getComponentId();
 
-        if (componentId.startsWith("btn:leaderboard_page:")) {
-            Integer page = parsePage(componentId, "btn:leaderboard_page:");
-            if (page == null) {
-                replyStaleInteraction(event);
-            } else {
-                handleLeaderboardPage(event, page, true);
-            }
-            return;
-        }
-
-        if (componentId.startsWith("btn:history_page:")) {
-            Integer page = parsePage(componentId, "btn:history_page:");
-            if (page == null) {
-                replyStaleInteraction(event);
-            } else {
-                handleMatchHistoryPage(event, page, true);
-            }
-            return;
-        }
-
         switch (componentId) {
-            case "btn:match_history" -> handleMatchHistoryPage(event, 0, false);
-            case "btn:leaderboard" -> handleLeaderboardPage(event, 0, false);
+            case "btn:match_history" -> handleMatchHistory(event);
+            case "btn:leaderboard" -> handleLeaderboard(event);
             case "btn:report_match" -> handleReportMatchButton(event);
             default -> {
             }
@@ -219,128 +197,47 @@ public class RankedCommandListener extends ListenerAdapter {
         }
     }
 
-    private void handleMatchHistoryPage(ButtonInteractionEvent event, int page, boolean isUpdate) {
+    private void handleMatchHistory(ButtonInteractionEvent event) {
         try {
-            PageDto<MatchHistoryEntryDto> history = matchService.getMatchHistory(
-                    event.getUser().getIdLong(),
-                    page,
-                    MATCH_HISTORY_PAGE_SIZE
-            );
-
-            if (page > 0 && history.totalPages() > 0 && history.content().isEmpty()) {
-                history = matchService.getMatchHistory(
-                        event.getUser().getIdLong(),
-                        history.totalPages() - 1,
-                        MATCH_HISTORY_PAGE_SIZE
-                );
-            }
-
-            if (history.totalItems() == 0) {
-                sendOrEditText(event, isUpdate, "У вас пока нет сыгранных матчей в текущем сезоне.");
+            List<MatchHistoryEntryDto> history = matchService.getFullMatchHistory(event.getUser().getIdLong());
+            if (history.isEmpty()) {
+                event.reply("У вас пока нет сыгранных матчей в текущем сезоне.")
+                        .setEphemeral(true)
+                        .queue();
                 return;
             }
-
-            sendOrEditEmbed(
-                    event,
-                    isUpdate,
-                    formatter.matchHistory(history),
-                    historyButtons(history)
-            );
+            replyChunks(event, formatter.matchHistory(history));
         } catch (BusinessException e) {
-            sendOrEditText(event, isUpdate, errorMessageMapper.toUserMessage(e));
+            event.reply(errorMessageMapper.toUserMessage(e)).setEphemeral(true).queue();
         } catch (Exception e) {
             log.error("BUTTON ERROR: failed to render match history", e);
-            sendOrEditText(event, isUpdate, errorMessageMapper.internalError());
+            event.reply(errorMessageMapper.internalError()).setEphemeral(true).queue();
         }
     }
 
-    private void handleLeaderboardPage(ButtonInteractionEvent event, int page, boolean isUpdate) {
+    private void handleLeaderboard(ButtonInteractionEvent event) {
         try {
-            PageDto<LeaderboardEntryDto> leaderboard =
-                    leaderboardService.getLeaderboardForActiveSeason(page, LEADERBOARD_PAGE_SIZE);
-
-            if (page > 0 && leaderboard.totalPages() > 0 && leaderboard.content().isEmpty()) {
-                leaderboard = leaderboardService.getLeaderboardForActiveSeason(
-                        leaderboard.totalPages() - 1,
-                        LEADERBOARD_PAGE_SIZE
-                );
-            }
-
-            if (leaderboard.totalItems() == 0) {
-                sendOrEditText(event, isUpdate, "Таблица лидеров пока пуста.");
+            List<LeaderboardEntryDto> leaderboard = leaderboardService.getFullLeaderboardForActiveSeason();
+            if (leaderboard.isEmpty()) {
+                event.reply("Таблица лидеров пока пуста.").setEphemeral(true).queue();
                 return;
             }
-
-            sendOrEditEmbed(event, isUpdate, formatter.leaderboard(leaderboard), leaderboardButtons(leaderboard));
+            replyChunks(event, formatter.leaderboard(leaderboard));
         } catch (BusinessException e) {
-            sendOrEditText(event, isUpdate, errorMessageMapper.toUserMessage(e));
+            event.reply(errorMessageMapper.toUserMessage(e)).setEphemeral(true).queue();
         } catch (Exception e) {
             log.error("BUTTON ERROR: failed to render leaderboard", e);
-            sendOrEditText(event, isUpdate, errorMessageMapper.internalError());
+            event.reply(errorMessageMapper.internalError()).setEphemeral(true).queue();
         }
     }
 
-    private Integer parsePage(String componentId, String prefix) {
-        try {
-            int page = Integer.parseInt(componentId.substring(prefix.length()));
-            return page < 0 ? null : page;
-        } catch (NumberFormatException | IndexOutOfBoundsException e) {
-            return null;
-        }
-    }
-
-    private void replyStaleInteraction(ButtonInteractionEvent event) {
-        event.reply("Эта кнопка устарела. Откройте раздел заново через `/ranked`.")
-                .setEphemeral(true)
-                .queue();
-    }
-
-    private ActionRow historyButtons(PageDto<?> page) {
-        return ActionRow.of(
-                Button.primary("btn:history_page:" + (page.currentPage() - 1), "Назад")
-                        .withDisabled(page.isFirst()),
-                Button.secondary("btn:noop", (page.currentPage() + 1) + " / " + page.totalPages())
-                        .asDisabled(),
-                Button.primary("btn:history_page:" + (page.currentPage() + 1), "Вперед")
-                        .withDisabled(page.isLast())
-        );
-    }
-
-    private ActionRow leaderboardButtons(PageDto<?> page) {
-        return ActionRow.of(
-                Button.primary("btn:leaderboard_page:" + (page.currentPage() - 1), "Назад")
-                        .withDisabled(page.isFirst()),
-                Button.secondary("btn:noop", (page.currentPage() + 1) + " / " + page.totalPages())
-                        .asDisabled(),
-                Button.primary("btn:leaderboard_page:" + (page.currentPage() + 1), "Вперед")
-                        .withDisabled(page.isLast())
-        );
-    }
-
-    private void sendOrEditText(ButtonInteractionEvent event, boolean isUpdate, String message) {
-        if (isUpdate) {
-            event.editMessage(message).setComponents().queue();
-        } else {
-            event.reply(message).setEphemeral(true).queue();
-        }
-    }
-
-    private void sendOrEditEmbed(
-            ButtonInteractionEvent event,
-            boolean isUpdate,
-            net.dv8tion.jda.api.entities.MessageEmbed embed,
-            ActionRow actionRow
-    ) {
-        if (isUpdate) {
-            event.editMessageEmbeds(embed)
-                    .setComponents(actionRow)
-                    .queue();
-        } else {
-            event.replyEmbeds(embed)
-                    .setComponents(actionRow)
-                    .setEphemeral(true)
-                    .queue();
-        }
+    private void replyChunks(ButtonInteractionEvent event, List<String> chunks) {
+        event.reply(chunks.get(0)).setEphemeral(true).queue(hook -> {
+            hook.setEphemeral(true);
+            for (int i = 1; i < chunks.size(); i++) {
+                hook.sendMessage(chunks.get(i)).queue();
+            }
+        });
     }
 
     private void handleReportMatchButton(ButtonInteractionEvent event) {

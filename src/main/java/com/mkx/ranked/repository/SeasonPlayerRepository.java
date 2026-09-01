@@ -68,6 +68,8 @@ public interface SeasonPlayerRepository
             String displayName
     );
 
+    long countBySeason(SeasonEntity season);
+
     @Query("""
             select sp
             from SeasonPlayerEntity sp

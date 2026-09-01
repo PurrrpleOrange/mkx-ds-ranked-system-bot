@@ -2,6 +2,7 @@ package com.mkx.ranked.service;
 
 import com.mkx.ranked.model.dto.AdminMatchDto;
 import com.mkx.ranked.model.dto.AdminPlayerDto;
+import com.mkx.ranked.model.dto.AdminSeasonStatisticsDto;
 import com.mkx.ranked.model.dto.LeaderboardEntryDto;
 import com.mkx.ranked.model.dto.SeasonDto;
 import org.springframework.stereotype.Service;
@@ -16,17 +17,20 @@ public class AdminService {
     private final MatchService matchService;
     private final PlayerService playerService;
     private final LeaderboardService leaderboardService;
+    private final SeasonHistoryService seasonHistoryService;
 
     public AdminService(
             SeasonService seasonService,
             MatchService matchService,
             PlayerService playerService,
-            LeaderboardService leaderboardService
+            LeaderboardService leaderboardService,
+            SeasonHistoryService seasonHistoryService
     ) {
         this.seasonService = seasonService;
         this.matchService = matchService;
         this.playerService = playerService;
         this.leaderboardService = leaderboardService;
+        this.seasonHistoryService = seasonHistoryService;
     }
 
     public SeasonDto createSeason(String name, LocalDateTime plannedEndDate) {
@@ -45,6 +49,26 @@ public class AdminService {
         return seasonNumber == null
                 ? seasonService.getActiveSeason()
                 : seasonService.getSeasonByNumber(seasonNumber);
+    }
+
+    public SeasonDto getSeasonInfoById(long seasonId) {
+        return seasonService.getSeasonById(seasonId);
+    }
+
+    public List<SeasonDto> getAllSeasons() {
+        return seasonService.getAllSeasons();
+    }
+
+    public SeasonDto updateActiveSeasonPlannedEndDate(LocalDateTime plannedEndDate) {
+        return seasonService.updatePlannedEndDate(plannedEndDate);
+    }
+
+    public AdminSeasonStatisticsDto getPreviousSeasonStatisticsById(long seasonId) {
+        return seasonHistoryService.getFinishedSeasonStatistics(seasonId);
+    }
+
+    public AdminSeasonStatisticsDto getPreviousSeasonStatisticsByNumber(int seasonNumber) {
+        return seasonHistoryService.getFinishedSeasonStatisticsByNumber(seasonNumber);
     }
 
     public AdminMatchDto getMatchInfo(long matchId) {

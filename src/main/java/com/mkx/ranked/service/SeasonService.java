@@ -77,6 +77,14 @@ public class SeasonService {
         return findSeason(seasonNumber);
     }
 
+    @Transactional(readOnly = true)
+    public List<SeasonDto> getAllSeasons() {
+        return seasonRepository.findAllByOrderBySeasonNumberDesc()
+                .stream()
+                .map(this::toDto)
+                .toList();
+    }
+
     @Transactional
     public SeasonDto createNewSeason(String name, LocalDateTime plannedEndDate) {
         if (name == null || name.isBlank()) {
@@ -106,13 +114,16 @@ public class SeasonService {
     }
 
     @Transactional
-    public boolean updatePlannedEndDate(LocalDateTime newPlannedEndDate) {
+    public SeasonDto updatePlannedEndDate(LocalDateTime newPlannedEndDate) {
+        if (newPlannedEndDate == null) {
+            throw new BusinessException("Planned end date must not be null.");
+        }
         SeasonEntity currentSeason = seasonRepository.findByStatusForUpdate(SeasonStatus.ACTIVE)
                 .orElseThrow(SeasonNotActiveException::new);
         currentSeason.setPlannedEndDate(newPlannedEndDate);
-        seasonRepository.save(currentSeason);
+        SeasonEntity saved = seasonRepository.save(currentSeason);
         log.info("SEASON SUCCESS: updated planned end date for season #{}", currentSeason.getSeasonNumber());
-        return true;
+        return toDto(saved);
     }
 
     @Transactional

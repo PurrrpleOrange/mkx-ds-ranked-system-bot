@@ -1,0 +1,94 @@
+package com.mkx.ranked.discord.formatter;
+
+import com.mkx.ranked.model.dto.LeaderboardEntryDto;
+import com.mkx.ranked.model.dto.MatchHistoryEntryDto;
+import com.mkx.ranked.model.dto.MatchReportPreviewDto;
+import com.mkx.ranked.model.dto.MatchResult;
+import com.mkx.ranked.model.dto.PlayerProfileDto;
+import com.mkx.ranked.model.dto.RegistrationResultDto;
+import com.mkx.ranked.model.dto.SeasonDto;
+import com.mkx.ranked.model.enums.SeasonStatus;
+import org.junit.jupiter.api.Test;
+
+import java.awt.Color;
+import java.time.LocalDateTime;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class RankedMessageFormatterTest {
+
+    private final RankedMessageFormatter formatter = new RankedMessageFormatter();
+
+    @Test
+    void usesTurquoiseForInformationGreenForConfirmedAndRedForRejected() {
+        Color informationColor = new Color(0, 255, 200);
+        SeasonDto season = new SeasonDto(90L, 9, "Season 9", SeasonStatus.ACTIVE, null, null, null);
+        PlayerProfileDto profile = new PlayerProfileDto(
+                1L, 11L, "Sub-Zero", 1200, 5, 1, "Elder God", "🏆", season
+        );
+        RegistrationResultDto registration = new RegistrationResultDto(
+                1L, 11L, "discord", "Sub-Zero", 90L, 9, 1000, 0
+        );
+        MatchReportPreviewDto preview = new MatchReportPreviewDto(
+                11L, 22L, "Sub-Zero", "Scorpion", 5, 2
+        );
+        MatchResult confirmed = new MatchResult(
+                501L, 11L, "Sub-Zero", 22L, "Scorpion", 5, 2, 18, -18, 1218, 1182
+        );
+
+        assertEquals(informationColor, formatter.rankedMenu(profile).getColor());
+        assertEquals(informationColor, formatter.registrationCompleted(registration).getColor());
+        assertEquals(informationColor, formatter.matchReportConfirmation(preview).getColor());
+        assertEquals(Color.GREEN, formatter.matchRegistered(confirmed, 22L).getColor());
+        assertEquals(Color.RED, formatter.matchRejected(11L, 22L, 22L).getColor());
+    }
+
+    @Test
+    void fullMatchHistoryShowsEveryMatchIdWithoutPagination() {
+        List<MatchHistoryEntryDto> matches = List.of(
+                new MatchHistoryEntryDto(
+                        502L,
+                        true,
+                        "Scorpion",
+                        5,
+                        2,
+                        18,
+                        LocalDateTime.of(2026, 9, 1, 10, 0)
+                ),
+                new MatchHistoryEntryDto(
+                        501L,
+                        false,
+                        "Sub-Zero",
+                        4,
+                        5,
+                        -20,
+                        LocalDateTime.of(2026, 8, 31, 20, 0)
+                )
+        );
+
+        String rendered = String.join("", formatter.matchHistory(matches));
+
+        assertTrue(rendered.contains("Матч #502"));
+        assertTrue(rendered.contains("Матч #501"));
+        assertTrue(rendered.contains("Scorpion"));
+        assertTrue(rendered.contains("Sub-Zero"));
+        assertFalse(rendered.toLowerCase().contains("страница"));
+    }
+
+    @Test
+    void fullLeaderboardShowsAllPlayersWithoutPagination() {
+        List<LeaderboardEntryDto> players = List.of(
+                new LeaderboardEntryDto(1, 1L, 11L, "First", 1400, 10, "Elder God", "🏆"),
+                new LeaderboardEntryDto(2, 2L, 22L, "Second", 1300, 8, "God", "🥈")
+        );
+
+        String rendered = String.join("", formatter.leaderboard(players));
+
+        assertTrue(rendered.contains("#1** First"));
+        assertTrue(rendered.contains("#2** Second"));
+        assertFalse(rendered.toLowerCase().contains("страница"));
+    }
+}

@@ -6,12 +6,14 @@ import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
 import com.mkx.ranked.model.dto.LeaderboardEntryDto;
+import com.mkx.ranked.model.dto.AdminSeasonStatisticsDto;
 import com.mkx.ranked.model.dto.SeasonDto;
 import com.mkx.ranked.model.dto.SeasonPlayerHistoryDto;
 import com.mkx.ranked.model.enums.RankTier;
 import com.mkx.ranked.model.enums.SeasonStatus;
 import com.mkx.ranked.repository.SeasonPlayerRepository;
 import com.mkx.ranked.repository.SeasonRepository;
+import com.mkx.ranked.repository.MatchRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,17 +27,20 @@ public class SeasonHistoryService {
     private final SeasonPlayerRepository seasonPlayerRepository;
     private final SeasonService seasonService;
     private final LeaderboardService leaderboardService;
+    private final MatchRepository matchRepository;
 
     public SeasonHistoryService(
             SeasonRepository seasonRepository,
             SeasonPlayerRepository seasonPlayerRepository,
             SeasonService seasonService,
-            LeaderboardService leaderboardService
+            LeaderboardService leaderboardService,
+            MatchRepository matchRepository
     ) {
         this.seasonRepository = seasonRepository;
         this.seasonPlayerRepository = seasonPlayerRepository;
         this.seasonService = seasonService;
         this.leaderboardService = leaderboardService;
+        this.matchRepository = matchRepository;
     }
 
     @Transactional(readOnly = true)
@@ -66,6 +71,19 @@ public class SeasonHistoryService {
     }
 
     @Transactional(readOnly = true)
+    public AdminSeasonStatisticsDto getFinishedSeasonStatistics(long seasonId) {
+        return toStatistics(getFinishedSeasonEntity(seasonId));
+    }
+
+    @Transactional(readOnly = true)
+    public AdminSeasonStatisticsDto getFinishedSeasonStatisticsByNumber(int seasonNumber) {
+        SeasonEntity season = seasonRepository.findBySeasonNumber(seasonNumber)
+                .orElseThrow(() -> new SeasonNotFoundException(seasonNumber));
+        validateFinished(season);
+        return toStatistics(season);
+    }
+
+    @Transactional(readOnly = true)
     public Optional<SeasonPlayerHistoryDto> findPlayerInFinishedSeason(long seasonId, long discordId) {
         SeasonEntity season = getFinishedSeasonEntity(seasonId);
         return seasonPlayerRepository.findBySeasonAndPlayerDiscordId(season, discordId)
@@ -83,6 +101,24 @@ public class SeasonHistoryService {
         if (season.getStatus() != SeasonStatus.FINISHED) {
             throw new BusinessException("Season history is available only for FINISHED seasons.");
         }
+    }
+
+    private AdminSeasonStatisticsDto toStatistics(SeasonEntity season) {
+        List<LeaderboardEntryDto> leaderboard = leaderboardService.getLeaderboardForSeason(season.getId());
+        int averageRating = leaderboard.isEmpty()
+                ? 0
+                : (int) Math.round(leaderboard.stream()
+                        .mapToInt(LeaderboardEntryDto::rating)
+                        .average()
+                        .orElse(0));
+
+        return new AdminSeasonStatisticsDto(
+                seasonService.toDto(season),
+                seasonPlayerRepository.countBySeason(season),
+                matchRepository.countBySeason(season),
+                averageRating,
+                leaderboard.stream().limit(10).toList()
+        );
     }
 
     private SeasonPlayerHistoryDto toHistoryDto(SeasonPlayerEntity seasonPlayer) {

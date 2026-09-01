@@ -4,7 +4,6 @@ import com.mkx.ranked.model.dto.LeaderboardEntryDto;
 import com.mkx.ranked.model.dto.MatchHistoryEntryDto;
 import com.mkx.ranked.model.dto.MatchReportPreviewDto;
 import com.mkx.ranked.model.dto.MatchResult;
-import com.mkx.ranked.model.dto.PageDto;
 import com.mkx.ranked.model.dto.PlayerProfileDto;
 import com.mkx.ranked.model.dto.RegistrationResultDto;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -14,14 +13,19 @@ import org.springframework.stereotype.Component;
 import java.awt.Color;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 
 @Component
 public class RankedMessageFormatter {
 
+    private static final Color INFORMATION_COLOR = new Color(0, 255, 200);
+    private static final int DISCORD_MESSAGE_CHUNK_SIZE = 1900;
+
     public MessageEmbed rankedMenu(PlayerProfileDto profile) {
         EmbedBuilder embed = new EmbedBuilder();
         embed.setTitle("Mortal Kombat X - Ranked Season #" + profile.season().seasonNumber());
-        embed.setColor(new Color(175, 0, 0));
+        embed.setColor(INFORMATION_COLOR);
         embed.setDescription("""
                 Привет, **%s**!
 
@@ -48,7 +52,7 @@ public class RankedMessageFormatter {
     public MessageEmbed registrationCompleted(RegistrationResultDto result) {
         return new EmbedBuilder()
                 .setTitle("Регистрация завершена")
-                .setColor(Color.GREEN)
+                .setColor(INFORMATION_COLOR)
                 .setDescription("""
                         Игрок **%s** зарегистрирован в текущем сезоне.
 
@@ -69,7 +73,7 @@ public class RankedMessageFormatter {
     public MessageEmbed matchReportConfirmation(MatchReportPreviewDto preview) {
         return new EmbedBuilder()
                 .setTitle("Подтверждение результата матча FT5")
-                .setColor(Color.ORANGE)
+                .setColor(INFORMATION_COLOR)
                 .setDescription("""
                         **%s** заявляет о завершении матча.
 
@@ -128,19 +132,17 @@ public class RankedMessageFormatter {
                 .build();
     }
 
-    public MessageEmbed matchHistory(PageDto<MatchHistoryEntryDto> page) {
-        EmbedBuilder embed = new EmbedBuilder();
-        embed.setTitle("История матчей (страница %d из %d)"
-                .formatted(page.currentPage() + 1, page.totalPages()));
-        embed.setColor(Color.CYAN);
-
-        StringBuilder description = new StringBuilder();
-        for (MatchHistoryEntryDto match : page.content()) {
+    public List<String> matchHistory(List<MatchHistoryEntryDto> matches) {
+        StringBuilder message = new StringBuilder("**ИСТОРИЯ МАТЧЕЙ ТЕКУЩЕГО СЕЗОНА**\n\n");
+        for (MatchHistoryEntryDto match : matches) {
             String delta = match.ratingDelta() > 0
                     ? "+" + match.ratingDelta()
                     : String.valueOf(match.ratingDelta());
 
-            description.append(match.win() ? "WIN" : "LOSE")
+            message.append("`Матч #")
+                    .append(match.matchId())
+                    .append("` | ")
+                    .append(match.win() ? "WIN" : "LOSE")
                     .append(" **VS ")
                     .append(match.opponentDisplayName())
                     .append("** (")
@@ -153,20 +155,13 @@ public class RankedMessageFormatter {
                     .append(formatDiscordTimestamp(match.createdAt()))
                     .append("\n");
         }
-
-        embed.setDescription(description.toString());
-        return embed.build();
+        return splitMessage(message.toString());
     }
 
-    public MessageEmbed leaderboard(PageDto<LeaderboardEntryDto> page) {
-        EmbedBuilder embed = new EmbedBuilder();
-        embed.setTitle("Таблица лидеров (страница %d из %d)"
-                .formatted(page.currentPage() + 1, page.totalPages()));
-        embed.setColor(Color.YELLOW);
-
-        StringBuilder description = new StringBuilder();
-        for (LeaderboardEntryDto player : page.content()) {
-            description.append(player.tierEmoji())
+    public List<String> leaderboard(List<LeaderboardEntryDto> players) {
+        StringBuilder message = new StringBuilder("**ТАБЛИЦА ЛИДЕРОВ ТЕКУЩЕГО СЕЗОНА**\n\n");
+        for (LeaderboardEntryDto player : players) {
+            message.append(player.tierEmoji())
                     .append(" **#")
                     .append(player.rank())
                     .append("** ")
@@ -178,9 +173,26 @@ public class RankedMessageFormatter {
                     .append(player.gamesPlayed())
                     .append(")\n");
         }
+        return splitMessage(message.toString());
+    }
 
-        embed.setDescription(description.toString());
-        return embed.build();
+    private List<String> splitMessage(String message) {
+        List<String> chunks = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+
+        for (String line : message.split("\n")) {
+            if (!current.isEmpty()
+                    && current.length() + line.length() + 1 > DISCORD_MESSAGE_CHUNK_SIZE) {
+                chunks.add(current.toString());
+                current.setLength(0);
+            }
+            current.append(line).append('\n');
+        }
+
+        if (!current.isEmpty()) {
+            chunks.add(current.toString());
+        }
+        return chunks;
     }
 
     private String formatDiscordTimestamp(LocalDateTime dateTime) {

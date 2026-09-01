@@ -39,6 +39,8 @@ public interface SeasonRepository extends JpaRepository<SeasonEntity, Long> {
 
     List<SeasonEntity> findAllByStatusOrderByEndDateDescSeasonNumberDesc(SeasonStatus status);
 
+    List<SeasonEntity> findAllByOrderBySeasonNumberDesc();
+
     @Query(value = "select nextval('season_number_seq')", nativeQuery = true)
     Long getNextSeasonNumber();
 }

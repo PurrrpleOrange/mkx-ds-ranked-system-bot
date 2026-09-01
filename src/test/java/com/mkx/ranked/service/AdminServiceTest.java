@@ -2,6 +2,7 @@ package com.mkx.ranked.service;
 
 import com.mkx.ranked.model.dto.AdminMatchDto;
 import com.mkx.ranked.model.dto.AdminPlayerDto;
+import com.mkx.ranked.model.dto.AdminSeasonStatisticsDto;
 import com.mkx.ranked.model.dto.LeaderboardEntryDto;
 import com.mkx.ranked.model.dto.SeasonDto;
 import com.mkx.ranked.model.enums.SeasonStatus;
@@ -22,6 +23,7 @@ class AdminServiceTest {
     private MatchService matchService;
     private PlayerService playerService;
     private LeaderboardService leaderboardService;
+    private SeasonHistoryService seasonHistoryService;
     private AdminService service;
 
     @BeforeEach
@@ -30,7 +32,14 @@ class AdminServiceTest {
         matchService = mock(MatchService.class);
         playerService = mock(PlayerService.class);
         leaderboardService = mock(LeaderboardService.class);
-        service = new AdminService(seasonService, matchService, playerService, leaderboardService);
+        seasonHistoryService = mock(SeasonHistoryService.class);
+        service = new AdminService(
+                seasonService,
+                matchService,
+                playerService,
+                leaderboardService,
+                seasonHistoryService
+        );
     }
 
     @Test
@@ -72,6 +81,50 @@ class AdminServiceTest {
         when(seasonService.getSeasonByNumber(7)).thenReturn(expected);
 
         assertSame(expected, service.getSeasonInfo(7));
+    }
+
+    @Test
+    void seasonInfoByIdReturnsThatSeason() {
+        SeasonDto expected = season(7, SeasonStatus.FINISHED);
+        when(seasonService.getSeasonById(70L)).thenReturn(expected);
+
+        assertSame(expected, service.getSeasonInfoById(70L));
+    }
+
+    @Test
+    void returnsAllSeasonsForAdminList() {
+        List<SeasonDto> expected = List.of(
+                season(8, SeasonStatus.ACTIVE),
+                season(7, SeasonStatus.FINISHED)
+        );
+        when(seasonService.getAllSeasons()).thenReturn(expected);
+
+        assertSame(expected, service.getAllSeasons());
+    }
+
+    @Test
+    void updatesActiveSeasonPlannedEndThroughLifecycleService() {
+        LocalDateTime plannedEnd = LocalDateTime.of(2026, 12, 15, 20, 0);
+        SeasonDto expected = season(8, SeasonStatus.ACTIVE);
+        when(seasonService.updatePlannedEndDate(plannedEnd)).thenReturn(expected);
+
+        assertSame(expected, service.updateActiveSeasonPlannedEndDate(plannedEnd));
+    }
+
+    @Test
+    void returnsPreviousSeasonStatisticsById() {
+        AdminSeasonStatisticsDto expected = mock(AdminSeasonStatisticsDto.class);
+        when(seasonHistoryService.getFinishedSeasonStatistics(70L)).thenReturn(expected);
+
+        assertSame(expected, service.getPreviousSeasonStatisticsById(70L));
+    }
+
+    @Test
+    void returnsPreviousSeasonStatisticsByNumber() {
+        AdminSeasonStatisticsDto expected = mock(AdminSeasonStatisticsDto.class);
+        when(seasonHistoryService.getFinishedSeasonStatisticsByNumber(7)).thenReturn(expected);
+
+        assertSame(expected, service.getPreviousSeasonStatisticsByNumber(7));
     }
 
     @Test

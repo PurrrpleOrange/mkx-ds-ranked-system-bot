@@ -213,6 +213,18 @@ public class MatchService {
     }
 
     @Transactional(readOnly = true)
+    public List<MatchHistoryEntryDto> getFullMatchHistory(long discordId) {
+        PlayerEntity player = findPlayerByDiscordId(discordId);
+        SeasonEntity season = seasonService.getCurrentSeasonEntity();
+        SeasonPlayerEntity seasonPlayer = findSeasonPlayer(season, player);
+
+        return matchRepository.findAllByWinnerOrLoserOrderByCreatedAtDesc(seasonPlayer, seasonPlayer)
+                .stream()
+                .map(match -> toHistoryEntry(match, seasonPlayer))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public PageDto<MatchHistoryEntryDto> getMatchHistory(
             long discordId,
             int page,
@@ -248,6 +260,7 @@ public class MatchService {
         SeasonPlayerEntity opponent = win ? match.getLoser() : match.getWinner();
 
         return new MatchHistoryEntryDto(
+                match.getId(),
                 win,
                 opponent.getDisplayName(),
                 win ? match.getWinnerScore() : match.getLoserScore(),

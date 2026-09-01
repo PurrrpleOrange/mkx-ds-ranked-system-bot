@@ -134,6 +134,32 @@ class SeasonServiceTest {
         assertThrows(BusinessException.class, () -> service.finishSeason(1L));
     }
 
+    @Test
+    void returnsAllSeasonsNewestFirstWithInternalIds() {
+        SeasonEntity newest = season(90L, 9, SeasonStatus.ACTIVE);
+        SeasonEntity older = season(80L, 8, SeasonStatus.FINISHED);
+        when(seasonRepository.findAllByOrderBySeasonNumberDesc()).thenReturn(List.of(newest, older));
+
+        List<SeasonDto> result = service.getAllSeasons();
+
+        assertEquals(List.of(9, 8), result.stream().map(SeasonDto::seasonNumber).toList());
+        assertEquals(List.of(90L, 80L), result.stream().map(SeasonDto::id).toList());
+    }
+
+    @Test
+    void updatesPlannedEndDateOnlyOnLockedActiveSeason() {
+        SeasonEntity active = season(90L, 9, SeasonStatus.ACTIVE);
+        LocalDateTime plannedEnd = LocalDateTime.of(2026, 12, 15, 20, 0);
+        when(seasonRepository.findByStatusForUpdate(SeasonStatus.ACTIVE)).thenReturn(Optional.of(active));
+        when(seasonRepository.save(active)).thenReturn(active);
+
+        SeasonDto result = service.updatePlannedEndDate(plannedEnd);
+
+        assertEquals(plannedEnd, result.plannedEndDate());
+        verify(seasonRepository).findByStatusForUpdate(SeasonStatus.ACTIVE);
+        verify(seasonRepository).save(active);
+    }
+
     private SeasonEntity season(long id, int number, SeasonStatus status) {
         SeasonEntity season = new SeasonEntity(number, "Season " + number, null);
         ReflectionTestUtils.setField(season, "id", id);

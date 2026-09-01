@@ -6,6 +6,7 @@ import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
 import com.mkx.ranked.model.dto.AdminMatchDto;
+import com.mkx.ranked.model.dto.MatchHistoryEntryDto;
 import com.mkx.ranked.model.dto.MatchResult;
 import com.mkx.ranked.model.enums.SeasonStatus;
 import com.mkx.ranked.repository.MatchRepository;
@@ -20,6 +21,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -163,6 +165,66 @@ class MatchServiceTest {
         assertEquals(21, result.deltaWinner());
         assertEquals(-21, result.deltaLoser());
         assertEquals(createdAt, result.createdAt());
+    }
+
+    @Test
+    void fullMatchHistoryContainsMatchIdsInRepositoryOrder() {
+        PlayerRepository playerRepository = mock(PlayerRepository.class);
+        SeasonPlayerRepository seasonPlayerRepository = mock(SeasonPlayerRepository.class);
+        MatchRepository matchRepository = mock(MatchRepository.class);
+        SeasonService seasonService = mock(SeasonService.class);
+        MatchService service = new MatchService(
+                playerRepository,
+                seasonPlayerRepository,
+                matchRepository,
+                seasonService
+        );
+
+        PlayerEntity player = player(1L, 11L, "Discord Player");
+        SeasonEntity season = mock(SeasonEntity.class);
+        SeasonPlayerEntity participant = mock(SeasonPlayerEntity.class);
+        SeasonPlayerEntity opponent = mock(SeasonPlayerEntity.class);
+        MatchEntity newest = historyMatch(502L, season, participant, opponent, 5, 2, 18);
+        MatchEntity older = historyMatch(501L, season, opponent, participant, 5, 4, 20);
+
+        when(playerRepository.findByDiscordId(11L)).thenReturn(Optional.of(player));
+        when(seasonService.getCurrentSeasonEntity()).thenReturn(season);
+        when(seasonPlayerRepository.findBySeasonAndPlayer(season, player)).thenReturn(Optional.of(participant));
+        when(matchRepository.findAllByWinnerOrLoserOrderByCreatedAtDesc(participant, participant))
+                .thenReturn(List.of(newest, older));
+        when(participant.getId()).thenReturn(101L);
+        when(opponent.getId()).thenReturn(102L);
+        when(opponent.getDisplayName()).thenReturn("Opponent");
+
+        List<MatchHistoryEntryDto> result = service.getFullMatchHistory(11L);
+
+        assertEquals(List.of(502L, 501L), result.stream().map(MatchHistoryEntryDto::matchId).toList());
+        assertTrue(result.get(0).win());
+        assertFalse(result.get(1).win());
+        assertEquals("Opponent", result.get(0).opponentDisplayName());
+        assertEquals("Opponent", result.get(1).opponentDisplayName());
+    }
+
+    private MatchEntity historyMatch(
+            long id,
+            SeasonEntity season,
+            SeasonPlayerEntity winner,
+            SeasonPlayerEntity loser,
+            int winnerScore,
+            int loserScore,
+            int deltaWinner
+    ) {
+        MatchEntity match = mock(MatchEntity.class);
+        when(match.getId()).thenReturn(id);
+        when(match.getSeason()).thenReturn(season);
+        when(match.getWinner()).thenReturn(winner);
+        when(match.getLoser()).thenReturn(loser);
+        when(match.getWinnerScore()).thenReturn(winnerScore);
+        when(match.getLoserScore()).thenReturn(loserScore);
+        when(match.getDeltaWinner()).thenReturn(deltaWinner);
+        when(match.getDeltaLoser()).thenReturn(-deltaWinner);
+        when(match.getCreatedAt()).thenReturn(LocalDateTime.of(2026, 9, 1, 10, 0));
+        return match;
     }
 
     private PlayerEntity player(long id, long discordId, String displayName) {
