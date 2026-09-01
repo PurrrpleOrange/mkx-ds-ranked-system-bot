@@ -102,7 +102,9 @@ public class MatchService {
         SeasonPlayerEntity winner = findSeasonPlayer(season, winnerPlayer);
         SeasonPlayerEntity loser = findSeasonPlayer(season, loserPlayer);
 
-        int[] deltas = EloCalculator.calculateRatingChange(
+        validateSameSeason(season, winner, loser);
+
+        EloCalculator.RatingChange ratingChange = EloCalculator.calculate(
                 winner.getRating(),
                 winner.getGamesPlayed(),
                 loser.getRating(),
@@ -111,8 +113,8 @@ public class MatchService {
                 loserScore
         );
 
-        int deltaWinner = deltas[0];
-        int deltaLoser = deltas[1];
+        int deltaWinner = ratingChange.deltaWinner();
+        int deltaLoser = ratingChange.deltaLoser();
 
         winner.setRating(winner.getRating() + deltaWinner);
         winner.setGamesPlayed(winner.getGamesPlayed() + 1);
@@ -159,10 +161,12 @@ public class MatchService {
         SeasonPlayerEntity winner = match.getWinner();
         SeasonPlayerEntity loser = match.getLoser();
 
-        winner.setRating(Math.max(0, winner.getRating() - match.getDeltaWinner()));
-        winner.setGamesPlayed(Math.max(0, winner.getGamesPlayed() - 1));
-        loser.setRating(Math.max(0, loser.getRating() - match.getDeltaLoser()));
-        loser.setGamesPlayed(Math.max(0, loser.getGamesPlayed() - 1));
+        validateRollbackState(match, winner, loser);
+
+        winner.setRating(winner.getRating() - match.getDeltaWinner());
+        winner.setGamesPlayed(winner.getGamesPlayed() - 1);
+        loser.setRating(loser.getRating() - match.getDeltaLoser());
+        loser.setGamesPlayed(loser.getGamesPlayed() - 1);
 
         seasonPlayerRepository.save(winner);
         seasonPlayerRepository.save(loser);
@@ -232,6 +236,9 @@ public class MatchService {
             int reporterScore,
             int opponentScore
     ) {
+        validateDiscordId(reporterDiscordId);
+        validateDiscordId(opponentDiscordId);
+
         if (reporterDiscordId == opponentDiscordId) {
             throw new InvalidMatchException("You cannot report a match against yourself.");
         }
@@ -248,12 +255,54 @@ public class MatchService {
             int winnerScore,
             int loserScore
     ) {
+        validateDiscordId(winnerDiscordId);
+        validateDiscordId(loserDiscordId);
+
         if (winnerDiscordId == loserDiscordId) {
             throw new InvalidMatchException("You cannot play a ranked match against yourself.");
         }
 
-        if (winnerScore != 5 || loserScore < 0 || loserScore > 4) {
+        if (winnerScore != 5 || loserScore < 0 || loserScore > 4 || winnerScore <= loserScore) {
             throw new InvalidMatchException("Invalid FT5 score. Winner must have 5 wins and loser must have 0-4 wins.");
+        }
+    }
+
+    private void validateSameSeason(
+            SeasonEntity season,
+            SeasonPlayerEntity winner,
+            SeasonPlayerEntity loser
+    ) {
+        if (winner.getId().equals(loser.getId())) {
+            throw new InvalidMatchException("Winner and loser must be different players.");
+        }
+
+        Long seasonId = season.getId();
+        if (!seasonId.equals(winner.getSeason().getId()) || !seasonId.equals(loser.getSeason().getId())) {
+            throw new InvalidMatchException("Match participants must belong to the active season.");
+        }
+    }
+
+    private void validateRollbackState(
+            MatchEntity match,
+            SeasonPlayerEntity winner,
+            SeasonPlayerEntity loser
+    ) {
+        validateSameSeason(match.getSeason(), winner, loser);
+
+        if (winner.getGamesPlayed() <= 0 || loser.getGamesPlayed() <= 0) {
+            throw new InvalidMatchException("Cannot rollback match because participant gamesPlayed would become negative.");
+        }
+
+        int restoredWinnerRating = winner.getRating() - match.getDeltaWinner();
+        int restoredLoserRating = loser.getRating() - match.getDeltaLoser();
+        if (restoredWinnerRating < 0 || restoredLoserRating < 0) {
+            throw new InvalidMatchException("Cannot rollback match because participant rating would become negative.");
+        }
+    }
+
+    private void validateDiscordId(long discordId) {
+        if (discordId <= 0) {
+            throw new InvalidMatchException("Discord ID must be positive.");
         }
     }
 }

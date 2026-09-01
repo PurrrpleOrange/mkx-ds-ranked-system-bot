@@ -2,6 +2,12 @@ package com.mkx.ranked.service;
 
 public class EloCalculator {
 
+    private EloCalculator() {
+    }
+
+    public record RatingChange(int deltaWinner, int deltaLoser) {
+    }
+
     /**
      * Вычисляет математическое ожидание победы (E_A) для игрока A против B.
      */
@@ -44,6 +50,20 @@ public class EloCalculator {
     public static int[] calculateRatingChange(int ratingWinner, int gamesWinner,
                                               int ratingLoser, int gamesLoser,
                                               int winnerScore, int loserScore) {
+        RatingChange ratingChange = calculate(
+                ratingWinner,
+                gamesWinner,
+                ratingLoser,
+                gamesLoser,
+                winnerScore,
+                loserScore
+        );
+        return new int[]{ratingChange.deltaWinner(), ratingChange.deltaLoser()};
+    }
+
+    public static RatingChange calculate(int ratingWinner, int gamesWinner,
+                                         int ratingLoser, int gamesLoser,
+                                         int winnerScore, int loserScore) {
         // 1. Ожидание
         double expectedWinner = calculateExpectedScore(ratingWinner, ratingLoser);
         double expectedLoser = 1.0 - expectedWinner;
@@ -64,6 +84,6 @@ public class EloCalculator {
         int deltaWinner = (int) Math.round(rawDeltaWinner);
         int deltaLoser = (int) Math.round(rawDeltaLoser);
 
-        return new int[]{deltaWinner, deltaLoser};
+        return new RatingChange(deltaWinner, deltaLoser);
     }
 }

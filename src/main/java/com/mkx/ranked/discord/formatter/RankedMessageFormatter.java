@@ -65,12 +65,12 @@ public class RankedMessageFormatter {
 
     public MessageEmbed newProfilePrompt(String nickname) {
         return new EmbedBuilder()
-                .setTitle("Создание нового профиля")
-                .setColor(Color.GREEN)
+                .setTitle("Профиль не найден")
+                .setColor(Color.RED)
                 .setDescription("""
                         Профиль с ником **%s** не найден.
 
-                        Создать новый профиль со стартовым рейтингом **1000 MMR**?
+                        Проверьте игровой ник или обратитесь к администратору.
                         """.formatted(nickname))
                 .build();
     }

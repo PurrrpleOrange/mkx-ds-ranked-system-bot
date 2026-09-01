@@ -11,6 +11,8 @@ public interface SeasonRepository extends JpaRepository<SeasonEntity, Long> {
 
     Optional<SeasonEntity> findByStatus(SeasonStatus status);
 
+    long countByStatus(SeasonStatus status);
+
     Optional<SeasonEntity> findBySeasonNumber(Integer seasonNumber);
 
     Optional<SeasonEntity> findFirstByStatusOrderBySeasonNumberDesc(SeasonStatus status);

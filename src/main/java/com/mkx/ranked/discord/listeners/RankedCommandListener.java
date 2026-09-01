@@ -8,8 +8,10 @@ import com.mkx.ranked.model.dto.PageDto;
 import com.mkx.ranked.model.dto.PlayerProfileDto;
 import com.mkx.ranked.model.dto.RegistrationProfileDto;
 import com.mkx.ranked.model.dto.RegistrationReviewDto;
+import com.mkx.ranked.service.LeaderboardService;
 import com.mkx.ranked.service.MatchService;
 import com.mkx.ranked.service.PlayerService;
+import com.mkx.ranked.service.RegistrationService;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
@@ -39,15 +41,21 @@ public class RankedCommandListener extends ListenerAdapter {
     private static final int MATCH_HISTORY_PAGE_SIZE = 5;
 
     private final PlayerService playerService;
+    private final RegistrationService registrationService;
+    private final LeaderboardService leaderboardService;
     private final MatchService matchService;
     private final RankedMessageFormatter formatter;
 
     public RankedCommandListener(
             PlayerService playerService,
+            RegistrationService registrationService,
+            LeaderboardService leaderboardService,
             MatchService matchService,
             RankedMessageFormatter formatter
     ) {
         this.playerService = playerService;
+        this.registrationService = registrationService;
+        this.leaderboardService = leaderboardService;
         this.matchService = matchService;
         this.formatter = formatter;
     }
@@ -59,7 +67,7 @@ public class RankedCommandListener extends ListenerAdapter {
         }
 
         long discordId = event.getUser().getIdLong();
-        if (!playerService.isRegistered(discordId)) {
+        if (!registrationService.isRegistered(discordId)) {
             openRegistrationModal(event);
             return;
         }
@@ -80,14 +88,14 @@ public class RankedCommandListener extends ListenerAdapter {
         }
 
         String inputNickname = nicknameMapping.getAsString().trim();
-        if (playerService.isClaimedDisplayName(inputNickname)) {
+        if (registrationService.isClaimedUsername(inputNickname)) {
             event.reply("Никнейм **" + inputNickname + "** уже привязан к другому Discord аккаунту.")
                     .setEphemeral(true)
                     .queue();
             return;
         }
 
-        RegistrationReviewDto review = playerService.reviewRegistration(inputNickname);
+        RegistrationReviewDto review = registrationService.reviewRegistration(inputNickname);
         if (review.unclaimedProfile().isPresent()) {
             RegistrationProfileDto profile = review.unclaimedProfile().get();
             Button confirmBtn = Button.success("btn:confirm_claim:" + profile.playerId(), "Да, это мой профиль");
@@ -100,11 +108,11 @@ public class RankedCommandListener extends ListenerAdapter {
             return;
         }
 
-        Button createBtn = Button.success("btn:confirm_new:" + review.requestedNickname(), "Создать профиль");
         Button cancelBtn = Button.danger("btn:cancel_reg", "Отмена");
 
-        event.replyEmbeds(formatter.newProfilePrompt(review.requestedNickname()))
-                .setComponents(ActionRow.of(createBtn, cancelBtn))
+        event.reply("Профиль с ником **" + review.requestedNickname()
+                        + "** не найден в базе. Проверьте игровой ник или обратитесь к администратору.")
+                .setComponents(ActionRow.of(cancelBtn))
                 .setEphemeral(true)
                 .queue();
     }
@@ -235,21 +243,15 @@ public class RankedCommandListener extends ListenerAdapter {
     private void handleConfirmClaim(ButtonInteractionEvent event, String componentId) {
         try {
             long playerId = Long.parseLong(componentId.substring("btn:confirm_claim:".length()));
-            boolean success = playerService.claimProfile(
+            registrationService.claimProfile(
                     event.getUser().getIdLong(),
                     event.getUser().getName(),
                     playerId
             );
 
-            if (success) {
-                event.editMessage("Профиль успешно привязан. Напишите `/ranked`, чтобы открыть меню.")
-                        .setComponents()
-                        .queue();
-            } else {
-                event.editMessage("Не удалось привязать профиль. Возможно, его уже забрали.")
-                        .setComponents()
-                        .queue();
-            }
+            event.editMessage("Профиль успешно привязан. Напишите `/ranked`, чтобы открыть меню.")
+                    .setComponents()
+                    .queue();
         } catch (BusinessException e) {
             event.editMessage("Не удалось привязать профиль: " + e.getMessage())
                     .setComponents()
@@ -258,18 +260,9 @@ public class RankedCommandListener extends ListenerAdapter {
     }
 
     private void handleConfirmNew(ButtonInteractionEvent event, String componentId) {
-        String nickname = componentId.substring("btn:confirm_new:".length());
-
-        try {
-            playerService.createNewPlayer(event.getUser().getIdLong(), event.getUser().getName(), nickname);
-            event.editMessage("Новый профиль **" + nickname + "** создан. Напишите `/ranked`, чтобы открыть меню.")
-                    .setComponents()
-                    .queue();
-        } catch (BusinessException e) {
-            event.editMessage("Не удалось создать профиль: " + e.getMessage())
-                    .setComponents()
-                    .queue();
-        }
+        event.editMessage("Создание новых игровых профилей через Discord отключено.")
+                .setComponents()
+                .queue();
     }
 
     private void handleAdminSendRating(ButtonInteractionEvent event) {
@@ -281,7 +274,7 @@ public class RankedCommandListener extends ListenerAdapter {
         }
 
         try {
-            List<LeaderboardEntryDto> players = playerService.getFullLeaderboard();
+            List<LeaderboardEntryDto> players = leaderboardService.getFullLeaderboardForActiveSeason();
             List<String> chunks = formatter.splitMessage(formatter.fullLeaderboard(players), 1900);
 
             event.deferEdit().queue();
@@ -330,7 +323,7 @@ public class RankedCommandListener extends ListenerAdapter {
     private void handleLeaderboardPage(ButtonInteractionEvent event, int page, boolean isUpdate) {
         try {
             PageDto<LeaderboardEntryDto> leaderboard =
-                    playerService.getLeaderboard(page, LEADERBOARD_PAGE_SIZE);
+                    leaderboardService.getLeaderboardForActiveSeason(page, LEADERBOARD_PAGE_SIZE);
 
             if (leaderboard.totalItems() == 0) {
                 sendOrEditText(event, isUpdate, "Таблица лидеров пока пуста.");
