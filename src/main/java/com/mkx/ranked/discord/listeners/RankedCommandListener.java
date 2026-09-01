@@ -1,5 +1,6 @@
 package com.mkx.ranked.discord.listeners;
 
+import com.mkx.ranked.discord.DiscordErrorMessageMapper;
 import com.mkx.ranked.discord.formatter.RankedMessageFormatter;
 import com.mkx.ranked.exception.BusinessException;
 import com.mkx.ranked.model.dto.LeaderboardEntryDto;
@@ -8,6 +9,7 @@ import com.mkx.ranked.model.dto.PageDto;
 import com.mkx.ranked.model.dto.PlayerProfileDto;
 import com.mkx.ranked.model.dto.RegistrationProfileDto;
 import com.mkx.ranked.model.dto.RegistrationReviewDto;
+import com.mkx.ranked.model.dto.RegistrationResultDto;
 import com.mkx.ranked.service.LeaderboardService;
 import com.mkx.ranked.service.MatchService;
 import com.mkx.ranked.service.PlayerService;
@@ -45,19 +47,22 @@ public class RankedCommandListener extends ListenerAdapter {
     private final LeaderboardService leaderboardService;
     private final MatchService matchService;
     private final RankedMessageFormatter formatter;
+    private final DiscordErrorMessageMapper errorMessageMapper;
 
     public RankedCommandListener(
             PlayerService playerService,
             RegistrationService registrationService,
             LeaderboardService leaderboardService,
             MatchService matchService,
-            RankedMessageFormatter formatter
+            RankedMessageFormatter formatter,
+            DiscordErrorMessageMapper errorMessageMapper
     ) {
         this.playerService = playerService;
         this.registrationService = registrationService;
         this.leaderboardService = leaderboardService;
         this.matchService = matchService;
         this.formatter = formatter;
+        this.errorMessageMapper = errorMessageMapper;
     }
 
     @Override
@@ -66,13 +71,20 @@ public class RankedCommandListener extends ListenerAdapter {
             return;
         }
 
-        long discordId = event.getUser().getIdLong();
-        if (!registrationService.isRegistered(discordId)) {
-            openRegistrationModal(event);
-            return;
-        }
+        try {
+            long discordId = event.getUser().getIdLong();
+            if (!registrationService.isRegistered(discordId)) {
+                openRegistrationModal(event);
+                return;
+            }
 
-        showRankedMenu(event);
+            showRankedMenu(event);
+        } catch (BusinessException e) {
+            event.reply(errorMessageMapper.toUserMessage(e)).setEphemeral(true).queue();
+        } catch (Exception e) {
+            log.error("DISCORD ERROR: failed to execute /ranked", e);
+            event.reply(errorMessageMapper.internalError()).setEphemeral(true).queue();
+        }
     }
 
     @Override
@@ -81,40 +93,45 @@ public class RankedCommandListener extends ListenerAdapter {
             return;
         }
 
-        ModalMapping nicknameMapping = event.getValue("input:reg_nickname");
-        if (nicknameMapping == null) {
-            event.reply("Не указан игровой ник.").setEphemeral(true).queue();
-            return;
-        }
+        try {
+            ModalMapping nicknameMapping = event.getValue("input:reg_nickname");
+            if (nicknameMapping == null) {
+                event.reply("Не указан игровой ник.").setEphemeral(true).queue();
+                return;
+            }
 
-        String inputNickname = nicknameMapping.getAsString().trim();
-        if (registrationService.isClaimedUsername(inputNickname)) {
-            event.reply("Никнейм **" + inputNickname + "** уже привязан к другому Discord аккаунту.")
-                    .setEphemeral(true)
-                    .queue();
-            return;
-        }
+            String inputNickname = nicknameMapping.getAsString().trim();
+            if (registrationService.isClaimedUsername(inputNickname)) {
+                event.reply("Никнейм **" + inputNickname + "** уже привязан к другому Discord аккаунту.")
+                        .setEphemeral(true)
+                        .queue();
+                return;
+            }
 
-        RegistrationReviewDto review = registrationService.reviewRegistration(inputNickname);
-        if (review.unclaimedProfile().isPresent()) {
-            RegistrationProfileDto profile = review.unclaimedProfile().get();
-            Button confirmBtn = Button.success("btn:confirm_claim:" + profile.playerId(), "Да, это мой профиль");
+            RegistrationReviewDto review = registrationService.reviewRegistration(inputNickname);
+            if (review.unclaimedProfile().isPresent()) {
+                RegistrationProfileDto profile = review.unclaimedProfile().get();
+                Button confirmBtn = Button.success("btn:confirm_claim:" + profile.playerId(), "Да, это мой профиль");
+                Button cancelBtn = Button.danger("btn:cancel_reg", "Отмена");
+
+                event.replyEmbeds(formatter.registrationCandidate(profile))
+                        .setComponents(ActionRow.of(confirmBtn, cancelBtn))
+                        .setEphemeral(true)
+                        .queue();
+                return;
+            }
+
             Button cancelBtn = Button.danger("btn:cancel_reg", "Отмена");
-
-            event.replyEmbeds(formatter.registrationCandidate(profile))
-                    .setComponents(ActionRow.of(confirmBtn, cancelBtn))
+            event.replyEmbeds(formatter.newProfilePrompt(review.requestedNickname()))
+                    .setComponents(ActionRow.of(cancelBtn))
                     .setEphemeral(true)
                     .queue();
-            return;
+        } catch (BusinessException e) {
+            event.reply(errorMessageMapper.toUserMessage(e)).setEphemeral(true).queue();
+        } catch (Exception e) {
+            log.error("REGISTRATION ERROR: failed to review profile", e);
+            event.reply(errorMessageMapper.internalError()).setEphemeral(true).queue();
         }
-
-        Button cancelBtn = Button.danger("btn:cancel_reg", "Отмена");
-
-        event.reply("Профиль с ником **" + review.requestedNickname()
-                        + "** не найден в базе. Проверьте игровой ник или обратитесь к администратору.")
-                .setComponents(ActionRow.of(cancelBtn))
-                .setEphemeral(true)
-                .queue();
     }
 
     @Override
@@ -139,14 +156,22 @@ public class RankedCommandListener extends ListenerAdapter {
         }
 
         if (componentId.startsWith("btn:leaderboard_page:")) {
-            int page = Integer.parseInt(componentId.substring("btn:leaderboard_page:".length()));
-            handleLeaderboardPage(event, page, true);
+            Integer page = parsePage(componentId, "btn:leaderboard_page:");
+            if (page == null) {
+                replyStaleInteraction(event);
+            } else {
+                handleLeaderboardPage(event, page, true);
+            }
             return;
         }
 
         if (componentId.startsWith("btn:history_page:")) {
-            int page = Integer.parseInt(componentId.substring("btn:history_page:".length()));
-            handleMatchHistoryPage(event, page, true);
+            Integer page = parsePage(componentId, "btn:history_page:");
+            if (page == null) {
+                replyStaleInteraction(event);
+            } else {
+                handleMatchHistoryPage(event, page, true);
+            }
             return;
         }
 
@@ -163,6 +188,13 @@ public class RankedCommandListener extends ListenerAdapter {
     @Override
     public void onEntitySelectInteraction(EntitySelectInteractionEvent event) {
         if (!event.getComponentId().equals("select:opponent_report")) {
+            return;
+        }
+
+        if (event.getMentions().getUsers().isEmpty()) {
+            event.reply("Соперник не выбран. Откройте форму матча заново.")
+                    .setEphemeral(true)
+                    .queue();
             return;
         }
 
@@ -229,12 +261,12 @@ public class RankedCommandListener extends ListenerAdapter {
                     .setEphemeral(true)
                     .queue();
         } catch (BusinessException e) {
-            event.reply("Невозможно открыть меню: " + e.getMessage())
+            event.reply(errorMessageMapper.toUserMessage(e))
                     .setEphemeral(true)
                     .queue();
         } catch (Exception e) {
             log.error("DISCORD ERROR: failed to execute /ranked", e);
-            event.reply("Произошла внутренняя ошибка сервера.")
+            event.reply(errorMessageMapper.internalError())
                     .setEphemeral(true)
                     .queue();
         }
@@ -243,19 +275,24 @@ public class RankedCommandListener extends ListenerAdapter {
     private void handleConfirmClaim(ButtonInteractionEvent event, String componentId) {
         try {
             long playerId = Long.parseLong(componentId.substring("btn:confirm_claim:".length()));
-            registrationService.claimProfile(
+            RegistrationResultDto result = registrationService.claimProfile(
                     event.getUser().getIdLong(),
                     event.getUser().getName(),
                     playerId
             );
 
-            event.editMessage("Профиль успешно привязан. Напишите `/ranked`, чтобы открыть меню.")
+            event.editMessageEmbeds(formatter.registrationCompleted(result))
                     .setComponents()
                     .queue();
         } catch (BusinessException e) {
-            event.editMessage("Не удалось привязать профиль: " + e.getMessage())
+            event.editMessage(errorMessageMapper.toUserMessage(e))
                     .setComponents()
                     .queue();
+        } catch (NumberFormatException e) {
+            replyStaleInteraction(event);
+        } catch (Exception e) {
+            log.error("REGISTRATION ERROR: failed to claim profile", e);
+            event.editMessage(errorMessageMapper.internalError()).setComponents().queue();
         }
     }
 
@@ -282,7 +319,7 @@ public class RankedCommandListener extends ListenerAdapter {
                 event.getChannel().sendMessage(chunk).queue();
             }
         } catch (BusinessException e) {
-            event.reply("Не удалось отправить рейтинг: " + e.getMessage())
+            event.reply(errorMessageMapper.toUserMessage(e))
                     .setEphemeral(true)
                     .queue();
         } catch (Exception e) {
@@ -301,6 +338,14 @@ public class RankedCommandListener extends ListenerAdapter {
                     MATCH_HISTORY_PAGE_SIZE
             );
 
+            if (page > 0 && history.totalPages() > 0 && history.content().isEmpty()) {
+                history = matchService.getMatchHistory(
+                        event.getUser().getIdLong(),
+                        history.totalPages() - 1,
+                        MATCH_HISTORY_PAGE_SIZE
+                );
+            }
+
             if (history.totalItems() == 0) {
                 sendOrEditText(event, isUpdate, "У вас пока нет сыгранных матчей в текущем сезоне.");
                 return;
@@ -313,10 +358,10 @@ public class RankedCommandListener extends ListenerAdapter {
                     historyButtons(history)
             );
         } catch (BusinessException e) {
-            sendOrEditText(event, isUpdate, "Не удалось загрузить историю матчей: " + e.getMessage());
+            sendOrEditText(event, isUpdate, errorMessageMapper.toUserMessage(e));
         } catch (Exception e) {
             log.error("BUTTON ERROR: failed to render match history", e);
-            sendOrEditText(event, isUpdate, "Произошла ошибка при загрузке истории матчей.");
+            sendOrEditText(event, isUpdate, errorMessageMapper.internalError());
         }
     }
 
@@ -325,6 +370,13 @@ public class RankedCommandListener extends ListenerAdapter {
             PageDto<LeaderboardEntryDto> leaderboard =
                     leaderboardService.getLeaderboardForActiveSeason(page, LEADERBOARD_PAGE_SIZE);
 
+            if (page > 0 && leaderboard.totalPages() > 0 && leaderboard.content().isEmpty()) {
+                leaderboard = leaderboardService.getLeaderboardForActiveSeason(
+                        leaderboard.totalPages() - 1,
+                        LEADERBOARD_PAGE_SIZE
+                );
+            }
+
             if (leaderboard.totalItems() == 0) {
                 sendOrEditText(event, isUpdate, "Таблица лидеров пока пуста.");
                 return;
@@ -332,11 +384,26 @@ public class RankedCommandListener extends ListenerAdapter {
 
             sendOrEditEmbed(event, isUpdate, formatter.leaderboard(leaderboard), leaderboardButtons(leaderboard));
         } catch (BusinessException e) {
-            sendOrEditText(event, isUpdate, "Не удалось загрузить таблицу лидеров: " + e.getMessage());
+            sendOrEditText(event, isUpdate, errorMessageMapper.toUserMessage(e));
         } catch (Exception e) {
             log.error("BUTTON ERROR: failed to render leaderboard", e);
-            sendOrEditText(event, isUpdate, "Произошла ошибка при загрузке таблицы лидеров.");
+            sendOrEditText(event, isUpdate, errorMessageMapper.internalError());
         }
+    }
+
+    private Integer parsePage(String componentId, String prefix) {
+        try {
+            int page = Integer.parseInt(componentId.substring(prefix.length()));
+            return page < 0 ? null : page;
+        } catch (NumberFormatException | IndexOutOfBoundsException e) {
+            return null;
+        }
+    }
+
+    private void replyStaleInteraction(ButtonInteractionEvent event) {
+        event.reply("Эта кнопка устарела. Откройте раздел заново через `/ranked`.")
+                .setEphemeral(true)
+                .queue();
     }
 
     private ActionRow historyButtons(PageDto<?> page) {

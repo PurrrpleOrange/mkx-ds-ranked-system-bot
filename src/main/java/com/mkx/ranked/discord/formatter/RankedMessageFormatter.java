@@ -7,6 +7,7 @@ import com.mkx.ranked.model.dto.MatchResult;
 import com.mkx.ranked.model.dto.PageDto;
 import com.mkx.ranked.model.dto.PlayerProfileDto;
 import com.mkx.ranked.model.dto.RegistrationProfileDto;
+import com.mkx.ranked.model.dto.RegistrationResultDto;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import org.springframework.stereotype.Component;
@@ -60,6 +61,27 @@ public class RankedMessageFormatter {
 
                         Это ваш профиль?
                         """.formatted(profile.displayName(), profile.rating(), profile.gamesPlayed()))
+                .build();
+    }
+
+    public MessageEmbed registrationCompleted(RegistrationResultDto result) {
+        return new EmbedBuilder()
+                .setTitle("Регистрация завершена")
+                .setColor(Color.GREEN)
+                .setDescription("""
+                        Профиль **%s** успешно привязан к вашему Discord-аккаунту.
+
+                        **Сезон:** #%d
+                        **Рейтинг:** %d MMR
+                        **Сыграно игр:** %d
+
+                        Напишите `/ranked`, чтобы открыть меню.
+                        """.formatted(
+                        result.displayName(),
+                        result.seasonNumber(),
+                        result.rating(),
+                        result.gamesPlayed()
+                ))
                 .build();
     }
 

@@ -1,5 +1,6 @@
 package com.mkx.ranked.discord.listeners;
 
+import com.mkx.ranked.discord.DiscordErrorMessageMapper;
 import com.mkx.ranked.discord.formatter.RankedMessageFormatter;
 import com.mkx.ranked.exception.BusinessException;
 import com.mkx.ranked.model.dto.MatchReportPreviewDto;
@@ -20,13 +21,16 @@ public class ModalInteractionListener extends ListenerAdapter {
 
     private final MatchService matchService;
     private final RankedMessageFormatter formatter;
+    private final DiscordErrorMessageMapper errorMessageMapper;
 
     public ModalInteractionListener(
             MatchService matchService,
-            RankedMessageFormatter formatter
+            RankedMessageFormatter formatter,
+            DiscordErrorMessageMapper errorMessageMapper
     ) {
         this.matchService = matchService;
         this.formatter = formatter;
+        this.errorMessageMapper = errorMessageMapper;
     }
 
     @Override
@@ -96,12 +100,12 @@ public class ModalInteractionListener extends ListenerAdapter {
                             error -> log.error("MATCH REPORT ERROR: failed to send confirmation", error)
                     );
         } catch (BusinessException e) {
-            event.reply("Ошибка записи матча: " + e.getMessage())
+            event.reply(errorMessageMapper.toUserMessage(e))
                     .setEphemeral(true)
                     .queue();
         } catch (Exception e) {
             log.error("MATCH REPORT ERROR: unexpected failure", e);
-            event.reply("Произошла внутренняя ошибка сервера.")
+            event.reply(errorMessageMapper.internalError())
                     .setEphemeral(true)
                     .queue();
         }
@@ -109,7 +113,7 @@ public class ModalInteractionListener extends ListenerAdapter {
 
     private Long parseOpponentId(String modalId) {
         String[] parts = modalId.split(":");
-        if (parts.length < 3) {
+        if (parts.length != 3) {
             return null;
         }
 
