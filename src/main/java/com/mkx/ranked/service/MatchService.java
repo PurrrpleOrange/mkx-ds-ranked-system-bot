@@ -22,7 +22,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class MatchService {
@@ -99,8 +101,9 @@ public class MatchService {
         PlayerEntity winnerPlayer = findPlayerByDiscordId(winnerDiscordId);
         PlayerEntity loserPlayer = findPlayerByDiscordId(loserDiscordId);
         SeasonEntity season = seasonService.getCurrentSeasonEntity();
-        SeasonPlayerEntity winner = findSeasonPlayer(season, winnerPlayer);
-        SeasonPlayerEntity loser = findSeasonPlayer(season, loserPlayer);
+        LockedParticipants participants = findSeasonPlayersForUpdate(season, winnerPlayer, loserPlayer);
+        SeasonPlayerEntity winner = participants.get(winnerPlayer);
+        SeasonPlayerEntity loser = participants.get(loserPlayer);
 
         validateSameSeason(season, winner, loser);
 
@@ -113,8 +116,8 @@ public class MatchService {
                 loserScore
         );
 
-        int deltaWinner = ratingChange.deltaWinner();
-        int deltaLoser = ratingChange.deltaLoser();
+        int deltaWinner = calculateAppliedDelta(winner.getRating(), ratingChange.deltaWinner());
+        int deltaLoser = calculateAppliedDelta(loser.getRating(), ratingChange.deltaLoser());
 
         winner.setRating(winner.getRating() + deltaWinner);
         winner.setGamesPlayed(winner.getGamesPlayed() + 1);
@@ -155,11 +158,12 @@ public class MatchService {
 
     @Transactional
     public void revertMatch(Long matchId) {
-        MatchEntity match = matchRepository.findById(matchId)
+        MatchEntity match = matchRepository.findByIdForUpdate(matchId)
                 .orElseThrow(() -> new MatchNotFoundException(matchId));
 
-        SeasonPlayerEntity winner = match.getWinner();
-        SeasonPlayerEntity loser = match.getLoser();
+        LockedParticipants participants = findSeasonPlayersForUpdate(match.getWinner().getId(), match.getLoser().getId());
+        SeasonPlayerEntity winner = participants.get(match.getWinner().getId());
+        SeasonPlayerEntity loser = participants.get(match.getLoser().getId());
 
         validateRollbackState(match, winner, loser);
 
@@ -228,6 +232,48 @@ public class MatchService {
     private SeasonPlayerEntity findSeasonPlayer(SeasonEntity season, PlayerEntity player) {
         return seasonPlayerRepository.findBySeasonAndPlayer(season, player)
                 .orElseThrow(() -> new PlayerNotRegisteredException(player.getDiscordId()));
+    }
+
+    private LockedParticipants findSeasonPlayersForUpdate(
+            SeasonEntity season,
+            PlayerEntity winnerPlayer,
+            PlayerEntity loserPlayer
+    ) {
+        List<SeasonPlayerEntity> locked = seasonPlayerRepository.findAllBySeasonAndPlayerInForUpdate(
+                season,
+                List.of(winnerPlayer, loserPlayer)
+        );
+
+        Map<Long, SeasonPlayerEntity> byPlayerId = new HashMap<>();
+        for (SeasonPlayerEntity seasonPlayer : locked) {
+            byPlayerId.put(seasonPlayer.getPlayer().getId(), seasonPlayer);
+        }
+
+        if (!byPlayerId.containsKey(winnerPlayer.getId())) {
+            throw new PlayerNotRegisteredException(winnerPlayer.getDiscordId());
+        }
+        if (!byPlayerId.containsKey(loserPlayer.getId())) {
+            throw new PlayerNotRegisteredException(loserPlayer.getDiscordId());
+        }
+
+        return new LockedParticipants(byPlayerId, Map.of());
+    }
+
+    private LockedParticipants findSeasonPlayersForUpdate(Long winnerSeasonPlayerId, Long loserSeasonPlayerId) {
+        List<SeasonPlayerEntity> locked = seasonPlayerRepository.findAllByIdInForUpdate(
+                List.of(winnerSeasonPlayerId, loserSeasonPlayerId)
+        );
+
+        Map<Long, SeasonPlayerEntity> bySeasonPlayerId = new HashMap<>();
+        for (SeasonPlayerEntity seasonPlayer : locked) {
+            bySeasonPlayerId.put(seasonPlayer.getId(), seasonPlayer);
+        }
+
+        if (!bySeasonPlayerId.containsKey(winnerSeasonPlayerId) || !bySeasonPlayerId.containsKey(loserSeasonPlayerId)) {
+            throw new InvalidMatchException("Cannot rollback match because participant state was not found.");
+        }
+
+        return new LockedParticipants(Map.of(), bySeasonPlayerId);
     }
 
     private void validateReportedScore(
@@ -303,6 +349,24 @@ public class MatchService {
     private void validateDiscordId(long discordId) {
         if (discordId <= 0) {
             throw new InvalidMatchException("Discord ID must be positive.");
+        }
+    }
+
+    private int calculateAppliedDelta(int currentRating, int rawDelta) {
+        return Math.max(0, currentRating + rawDelta) - currentRating;
+    }
+
+    private record LockedParticipants(
+            Map<Long, SeasonPlayerEntity> byPlayerId,
+            Map<Long, SeasonPlayerEntity> bySeasonPlayerId
+    ) {
+
+        SeasonPlayerEntity get(PlayerEntity player) {
+            return byPlayerId.get(player.getId());
+        }
+
+        SeasonPlayerEntity get(Long seasonPlayerId) {
+            return bySeasonPlayerId.get(seasonPlayerId);
         }
     }
 }

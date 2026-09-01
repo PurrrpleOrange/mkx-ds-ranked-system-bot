@@ -3,9 +3,11 @@ package com.mkx.ranked.repository;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -19,6 +21,30 @@ public interface SeasonPlayerRepository
             SeasonEntity season,
             PlayerEntity player
     );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select sp
+            from SeasonPlayerEntity sp
+            join fetch sp.player
+            where sp.season = :season
+              and sp.player in :players
+            order by sp.id asc
+            """)
+    List<SeasonPlayerEntity> findAllBySeasonAndPlayerInForUpdate(
+            @Param("season") SeasonEntity season,
+            @Param("players") List<PlayerEntity> players
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select sp
+            from SeasonPlayerEntity sp
+            join fetch sp.player
+            where sp.id in :ids
+            order by sp.id asc
+            """)
+    List<SeasonPlayerEntity> findAllByIdInForUpdate(@Param("ids") List<Long> ids);
 
     boolean existsBySeasonAndPlayer(
             SeasonEntity season,
