@@ -43,7 +43,7 @@ public class PlayerService {
         return new PlayerProfileDto(
                 player.getId(),
                 player.getDiscordId(),
-                player.getDisplayName(),
+                seasonPlayer.getDisplayName(),
                 seasonPlayer.getRating(),
                 seasonPlayer.getGamesPlayed(),
                 rank,

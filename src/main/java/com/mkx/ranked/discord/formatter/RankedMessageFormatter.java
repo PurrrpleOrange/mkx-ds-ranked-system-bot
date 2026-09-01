@@ -6,7 +6,6 @@ import com.mkx.ranked.model.dto.MatchReportPreviewDto;
 import com.mkx.ranked.model.dto.MatchResult;
 import com.mkx.ranked.model.dto.PageDto;
 import com.mkx.ranked.model.dto.PlayerProfileDto;
-import com.mkx.ranked.model.dto.RegistrationProfileDto;
 import com.mkx.ranked.model.dto.RegistrationResultDto;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.MessageEmbed;
@@ -48,28 +47,12 @@ public class RankedMessageFormatter {
         return embed.build();
     }
 
-    public MessageEmbed registrationCandidate(RegistrationProfileDto profile) {
-        return new EmbedBuilder()
-                .setTitle("Найден импортированный профиль")
-                .setColor(Color.CYAN)
-                .setDescription("""
-                        В базе найден профиль:
-
-                        **Игровой ник:** %s
-                        **Рейтинг:** %d MMR
-                        **Сыграно игр:** %d
-
-                        Это ваш профиль?
-                        """.formatted(profile.displayName(), profile.rating(), profile.gamesPlayed()))
-                .build();
-    }
-
     public MessageEmbed registrationCompleted(RegistrationResultDto result) {
         return new EmbedBuilder()
                 .setTitle("Регистрация завершена")
                 .setColor(Color.GREEN)
                 .setDescription("""
-                        Профиль **%s** успешно привязан к вашему Discord-аккаунту.
+                        Игрок **%s** зарегистрирован в текущем сезоне.
 
                         **Сезон:** #%d
                         **Рейтинг:** %d MMR
@@ -82,18 +65,6 @@ public class RankedMessageFormatter {
                         result.rating(),
                         result.gamesPlayed()
                 ))
-                .build();
-    }
-
-    public MessageEmbed newProfilePrompt(String nickname) {
-        return new EmbedBuilder()
-                .setTitle("Профиль не найден")
-                .setColor(Color.RED)
-                .setDescription("""
-                        Профиль с ником **%s** не найден.
-
-                        Проверьте игровой ник или обратитесь к администратору.
-                        """.formatted(nickname))
                 .build();
     }
 

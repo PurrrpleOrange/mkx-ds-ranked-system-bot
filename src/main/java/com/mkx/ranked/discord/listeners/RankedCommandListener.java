@@ -7,8 +7,6 @@ import com.mkx.ranked.model.dto.LeaderboardEntryDto;
 import com.mkx.ranked.model.dto.MatchHistoryEntryDto;
 import com.mkx.ranked.model.dto.PageDto;
 import com.mkx.ranked.model.dto.PlayerProfileDto;
-import com.mkx.ranked.model.dto.RegistrationProfileDto;
-import com.mkx.ranked.model.dto.RegistrationReviewDto;
 import com.mkx.ranked.model.dto.RegistrationResultDto;
 import com.mkx.ranked.service.LeaderboardService;
 import com.mkx.ranked.service.MatchService;
@@ -101,35 +99,18 @@ public class RankedCommandListener extends ListenerAdapter {
             }
 
             String inputNickname = nicknameMapping.getAsString().trim();
-            if (registrationService.isClaimedUsername(inputNickname)) {
-                event.reply("Никнейм **" + inputNickname + "** уже привязан к другому Discord аккаунту.")
-                        .setEphemeral(true)
-                        .queue();
-                return;
-            }
-
-            RegistrationReviewDto review = registrationService.reviewRegistration(inputNickname);
-            if (review.unclaimedProfile().isPresent()) {
-                RegistrationProfileDto profile = review.unclaimedProfile().get();
-                Button confirmBtn = Button.success("btn:confirm_claim:" + profile.playerId(), "Да, это мой профиль");
-                Button cancelBtn = Button.danger("btn:cancel_reg", "Отмена");
-
-                event.replyEmbeds(formatter.registrationCandidate(profile))
-                        .setComponents(ActionRow.of(confirmBtn, cancelBtn))
-                        .setEphemeral(true)
-                        .queue();
-                return;
-            }
-
-            Button cancelBtn = Button.danger("btn:cancel_reg", "Отмена");
-            event.replyEmbeds(formatter.newProfilePrompt(review.requestedNickname()))
-                    .setComponents(ActionRow.of(cancelBtn))
+            RegistrationResultDto result = registrationService.register(
+                    event.getUser().getIdLong(),
+                    event.getUser().getName(),
+                    inputNickname
+            );
+            event.replyEmbeds(formatter.registrationCompleted(result))
                     .setEphemeral(true)
                     .queue();
         } catch (BusinessException e) {
             event.reply(errorMessageMapper.toUserMessage(e)).setEphemeral(true).queue();
         } catch (Exception e) {
-            log.error("REGISTRATION ERROR: failed to review profile", e);
+            log.error("REGISTRATION ERROR: failed to register user", e);
             event.reply(errorMessageMapper.internalError()).setEphemeral(true).queue();
         }
     }
@@ -137,23 +118,6 @@ public class RankedCommandListener extends ListenerAdapter {
     @Override
     public void onButtonInteraction(ButtonInteractionEvent event) {
         String componentId = event.getComponentId();
-
-        if (componentId.startsWith("btn:confirm_claim:")) {
-            handleConfirmClaim(event, componentId);
-            return;
-        }
-
-        if (componentId.startsWith("btn:confirm_new:")) {
-            handleConfirmNew(event, componentId);
-            return;
-        }
-
-        if (componentId.equals("btn:cancel_reg")) {
-            event.editMessage("Регистрация отменена. Напишите `/ranked`, когда будете готовы.")
-                    .setComponents()
-                    .queue();
-            return;
-        }
 
         if (componentId.startsWith("btn:leaderboard_page:")) {
             Integer page = parsePage(componentId, "btn:leaderboard_page:");
@@ -270,36 +234,6 @@ public class RankedCommandListener extends ListenerAdapter {
                     .setEphemeral(true)
                     .queue();
         }
-    }
-
-    private void handleConfirmClaim(ButtonInteractionEvent event, String componentId) {
-        try {
-            long playerId = Long.parseLong(componentId.substring("btn:confirm_claim:".length()));
-            RegistrationResultDto result = registrationService.claimProfile(
-                    event.getUser().getIdLong(),
-                    event.getUser().getName(),
-                    playerId
-            );
-
-            event.editMessageEmbeds(formatter.registrationCompleted(result))
-                    .setComponents()
-                    .queue();
-        } catch (BusinessException e) {
-            event.editMessage(errorMessageMapper.toUserMessage(e))
-                    .setComponents()
-                    .queue();
-        } catch (NumberFormatException e) {
-            replyStaleInteraction(event);
-        } catch (Exception e) {
-            log.error("REGISTRATION ERROR: failed to claim profile", e);
-            event.editMessage(errorMessageMapper.internalError()).setComponents().queue();
-        }
-    }
-
-    private void handleConfirmNew(ButtonInteractionEvent event, String componentId) {
-        event.editMessage("Создание новых игровых профилей через Discord отключено.")
-                .setComponents()
-                .queue();
     }
 
     private void handleAdminSendRating(ButtonInteractionEvent event) {

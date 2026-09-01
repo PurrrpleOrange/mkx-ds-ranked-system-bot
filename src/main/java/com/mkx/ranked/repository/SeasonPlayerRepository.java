@@ -51,6 +51,11 @@ public interface SeasonPlayerRepository
             PlayerEntity player
     );
 
+    boolean existsBySeasonAndDisplayNameIgnoreCase(
+            SeasonEntity season,
+            String displayName
+    );
+
     @Query("""
             select sp
             from SeasonPlayerEntity sp
@@ -82,10 +87,6 @@ public interface SeasonPlayerRepository
     Page<SeasonPlayerEntity> findAllBySeason(
             SeasonEntity season,
             Pageable pageable
-    );
-
-    List<SeasonPlayerEntity> findAllByPlayerOrderBySeason_SeasonNumberDesc(
-            PlayerEntity player
     );
 
     long countBySeasonAndRatingGreaterThan(

@@ -46,6 +46,8 @@ class MatchServiceTest {
         AtomicInteger loserRating = new AtomicInteger(5);
         SeasonPlayerEntity winner = seasonPlayer(101L, winnerPlayer, season, winnerRating, 10);
         SeasonPlayerEntity loser = seasonPlayer(102L, loserPlayer, season, loserRating, 10);
+        when(winner.getDisplayName()).thenReturn("Season Winner");
+        when(loser.getDisplayName()).thenReturn("Season Loser");
 
         when(playerRepository.findByDiscordId(11L)).thenReturn(Optional.of(winnerPlayer));
         when(playerRepository.findByDiscordId(22L)).thenReturn(Optional.of(loserPlayer));
@@ -69,6 +71,8 @@ class MatchServiceTest {
 
         assertEquals(0, result.newLoserRating());
         assertEquals(-5, result.deltaLoser());
+        assertEquals("Season Winner", result.winnerDisplayName());
+        assertEquals("Season Loser", result.loserDisplayName());
         assertEquals(-5, persisted.getDeltaLoser());
         assertEquals(5 + persisted.getDeltaLoser(), result.newLoserRating());
         assertEquals(result.newLoserRating() - persisted.getDeltaLoser(), 5);
@@ -78,7 +82,7 @@ class MatchServiceTest {
         PlayerEntity player = mock(PlayerEntity.class);
         when(player.getId()).thenReturn(id);
         when(player.getDiscordId()).thenReturn(discordId);
-        when(player.getDisplayName()).thenReturn(displayName);
+        when(player.getUsername()).thenReturn(displayName);
         return player;
     }
 
@@ -90,9 +94,11 @@ class MatchServiceTest {
             int gamesPlayed
     ) {
         SeasonPlayerEntity seasonPlayer = mock(SeasonPlayerEntity.class);
+        String displayName = player.getUsername();
         when(seasonPlayer.getId()).thenReturn(id);
         when(seasonPlayer.getPlayer()).thenReturn(player);
         when(seasonPlayer.getSeason()).thenReturn(season);
+        when(seasonPlayer.getDisplayName()).thenReturn(displayName);
         when(seasonPlayer.getRating()).thenAnswer(ignored -> rating.get());
         org.mockito.Mockito.doAnswer(invocation -> {
             rating.set(invocation.getArgument(0));

@@ -6,7 +6,7 @@ import jakarta.persistence.*;
  * Сущность участия игрока в конкретном рейтинговом сезоне.
  *
  * <p>Хранит сезонное состояние игрока:
- * рейтинг, количество сыгранных матчей и итоговое место.</p>
+ * игровой ник-снимок, рейтинг, количество сыгранных матчей и итоговое место.</p>
  *
  * <p>Постоянные данные игрока хранятся в {@link PlayerEntity},
  * а общая информация о сезоне — в {@link SeasonEntity}.</p>
@@ -45,6 +45,12 @@ public class SeasonPlayerEntity {
     private SeasonEntity season;
 
     /**
+     * Игровой ник в том виде, в котором игрок зарегистрирован в этом сезоне.
+     */
+    @Column(name = "display_name", nullable = false, length = 100)
+    private String displayName;
+
+    /**
      * Текущий рейтинг игрока в рамках сезона.
      */
     @Column(name = "rating", nullable = false)
@@ -76,10 +82,12 @@ public class SeasonPlayerEntity {
      *
      * @param player игрок
      * @param season сезон
+     * @param displayName игровой ник для этого сезона
      */
-    public SeasonPlayerEntity(PlayerEntity player, SeasonEntity season) {
+    public SeasonPlayerEntity(PlayerEntity player, SeasonEntity season, String displayName) {
         this.player = player;
         this.season = season;
+        this.displayName = displayName;
         this.rating = 1000;
         this.gamesPlayed = 0;
     }
@@ -117,6 +125,14 @@ public class SeasonPlayerEntity {
      */
     public void setSeason(SeasonEntity season) {
         this.season = season;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
     }
 
     /**

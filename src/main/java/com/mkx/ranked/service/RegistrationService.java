@@ -2,12 +2,11 @@ package com.mkx.ranked.service;
 
 import com.mkx.ranked.exception.BusinessException;
 import com.mkx.ranked.exception.PlayerNotFoundException;
+import com.mkx.ranked.exception.PlayerNotRegisteredException;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
-import com.mkx.ranked.model.dto.RegistrationProfileDto;
 import com.mkx.ranked.model.dto.RegistrationResultDto;
-import com.mkx.ranked.model.dto.RegistrationReviewDto;
 import com.mkx.ranked.repository.PlayerRepository;
 import com.mkx.ranked.repository.SeasonPlayerRepository;
 import org.springframework.stereotype.Service;
@@ -17,8 +16,6 @@ import java.util.Optional;
 
 @Service
 public class RegistrationService {
-
-    private static final int DEFAULT_RATING = 1000;
 
     private final PlayerRepository playerRepository;
     private final SeasonPlayerRepository seasonPlayerRepository;
@@ -37,109 +34,61 @@ public class RegistrationService {
     @Transactional(readOnly = true)
     public boolean isRegistered(long discordId) {
         validateDiscordId(discordId);
-        return playerRepository.existsByDiscordId(discordId);
+        SeasonEntity season = seasonService.getActiveSeasonEntity();
+        return playerRepository.findByDiscordId(discordId)
+                .map(player -> seasonPlayerRepository.existsBySeasonAndPlayer(season, player))
+                .orElse(false);
     }
 
     @Transactional(readOnly = true)
     public RegistrationResultDto getCurrentRegistration(long discordId) {
         validateDiscordId(discordId);
+        SeasonEntity season = seasonService.getActiveSeasonEntity();
         PlayerEntity player = playerRepository.findByDiscordId(discordId)
                 .orElseThrow(() -> new PlayerNotFoundException(discordId));
-        SeasonEntity season = seasonService.getActiveSeasonEntity();
         SeasonPlayerEntity seasonPlayer = seasonPlayerRepository.findBySeasonAndPlayer(season, player)
-                .orElseThrow(() -> new BusinessException("Player is linked to Discord but not registered in active season."));
+                .orElseThrow(() -> new PlayerNotRegisteredException(discordId));
         return toResult(player, seasonPlayer, season);
-    }
-
-    @Transactional(readOnly = true)
-    public RegistrationReviewDto reviewRegistration(String requestedUsername) {
-        String username = normalizeUsername(requestedUsername);
-        Optional<PlayerEntity> player = playerRepository.findFirstByUsernameIgnoreCase(username);
-
-        Optional<RegistrationProfileDto> candidate = player
-                .filter(it -> it.getDiscordId() == null)
-                .map(this::toRegistrationProfile);
-
-        return new RegistrationReviewDto(username, candidate);
-    }
-
-    @Transactional(readOnly = true)
-    public boolean isClaimedUsername(String requestedUsername) {
-        String username = normalizeUsername(requestedUsername);
-        return playerRepository.findFirstByUsernameIgnoreCase(username)
-                .map(PlayerEntity::getDiscordId)
-                .isPresent();
     }
 
     @Transactional
     public RegistrationResultDto register(long discordId, String discordUsername, String requestedUsername) {
         validateDiscordId(discordId);
-        String username = normalizeUsername(requestedUsername);
-
-        PlayerEntity player = playerRepository.findFirstByUsernameIgnoreCase(username)
-                .orElseThrow(() -> new BusinessException("Player with username '" + username + "' was not found."));
-
-        validateDiscordBinding(discordId, player);
-
-        player.setDiscordId(discordId);
-
+        String displayName = normalizeGameUsername(requestedUsername);
+        String currentDiscordUsername = normalizeDiscordUsername(discordUsername, displayName);
         SeasonEntity season = seasonService.getActiveSeasonEntity();
-        SeasonPlayerEntity seasonPlayer = seasonPlayerRepository.findBySeasonAndPlayer(season, player)
-                .orElseGet(() -> seasonPlayerRepository.save(new SeasonPlayerEntity(player, season)));
 
-        PlayerEntity savedPlayer = playerRepository.save(player);
-        return toResult(savedPlayer, seasonPlayer, season);
-    }
-
-    @Transactional
-    public RegistrationResultDto claimProfile(long discordId, String discordUsername, long playerId) {
-        validateDiscordId(discordId);
-        PlayerEntity player = playerRepository.findById(playerId)
-                .orElseThrow(() -> new BusinessException("Player profile #" + playerId + " was not found."));
-
-        validateDiscordBinding(discordId, player);
-
-        player.setDiscordId(discordId);
-        SeasonEntity season = seasonService.getActiveSeasonEntity();
-        SeasonPlayerEntity seasonPlayer = seasonPlayerRepository.findBySeasonAndPlayer(season, player)
-                .orElseGet(() -> seasonPlayerRepository.save(new SeasonPlayerEntity(player, season)));
-
-        PlayerEntity savedPlayer = playerRepository.save(player);
-        return toResult(savedPlayer, seasonPlayer, season);
-    }
-
-    private void validateDiscordBinding(long discordId, PlayerEntity player) {
-        if (player.getDiscordId() != null && !player.getDiscordId().equals(discordId)) {
-            throw new BusinessException("Player profile is already linked to another Discord account.");
+        Optional<PlayerEntity> existingPlayer = playerRepository.findByDiscordId(discordId);
+        if (existingPlayer.isPresent()
+                && seasonPlayerRepository.existsBySeasonAndPlayer(season, existingPlayer.get())) {
+            throw new BusinessException("You are already registered in the current season.");
+        }
+        if (seasonPlayerRepository.existsBySeasonAndDisplayNameIgnoreCase(season, displayName)) {
+            throw new BusinessException(
+                    "Username '" + displayName + "' is already registered in the current season."
+            );
         }
 
-        playerRepository.findByDiscordId(discordId)
-                .filter(existing -> !existing.getId().equals(player.getId()))
-                .ifPresent(existing -> {
-                    throw new BusinessException("This Discord account is already linked to another player.");
-                });
-    }
-
-    private RegistrationProfileDto toRegistrationProfile(PlayerEntity player) {
-        Optional<SeasonPlayerEntity> latestSeasonPlayer =
-                seasonPlayerRepository.findAllByPlayerOrderBySeason_SeasonNumberDesc(player)
-                        .stream()
-                        .findFirst();
-
-        return new RegistrationProfileDto(
-                player.getId(),
-                player.getDisplayName(),
-                latestSeasonPlayer.map(SeasonPlayerEntity::getRating).orElse(DEFAULT_RATING),
-                latestSeasonPlayer.map(SeasonPlayerEntity::getGamesPlayed).orElse(0)
+        PlayerEntity player = existingPlayer
+                .orElseGet(() -> new PlayerEntity(discordId, currentDiscordUsername));
+        player.setUsername(currentDiscordUsername);
+        PlayerEntity savedPlayer = playerRepository.save(player);
+        SeasonPlayerEntity seasonPlayer = seasonPlayerRepository.save(
+                new SeasonPlayerEntity(savedPlayer, season, displayName)
         );
+        return toResult(savedPlayer, seasonPlayer, season);
     }
 
-    private RegistrationResultDto toResult(PlayerEntity player, SeasonPlayerEntity seasonPlayer, SeasonEntity season) {
+    private RegistrationResultDto toResult(
+            PlayerEntity player,
+            SeasonPlayerEntity seasonPlayer,
+            SeasonEntity season
+    ) {
         return new RegistrationResultDto(
                 player.getId(),
                 player.getDiscordId(),
                 player.getUsername(),
-                player.getDisplayName(),
+                seasonPlayer.getDisplayName(),
                 season.getId(),
                 season.getSeasonNumber(),
                 seasonPlayer.getRating(),
@@ -147,11 +96,17 @@ public class RegistrationService {
         );
     }
 
-    private String normalizeUsername(String username) {
+    private String normalizeGameUsername(String username) {
         if (username == null || username.isBlank()) {
             throw new BusinessException("Username must not be blank.");
         }
         return username.trim();
+    }
+
+    private String normalizeDiscordUsername(String discordUsername, String fallback) {
+        return discordUsername == null || discordUsername.isBlank()
+                ? fallback
+                : discordUsername.trim();
     }
 
     private void validateDiscordId(long discordId) {

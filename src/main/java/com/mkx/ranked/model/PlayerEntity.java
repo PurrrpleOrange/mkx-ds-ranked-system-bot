@@ -5,8 +5,8 @@ import jakarta.persistence.*;
 /**
  * Сущность игрока.
  *
- * <p>Хранит постоянные данные игрока, которые не зависят
- * от конкретного рейтингового сезона.</p>
+ * <p>Хранит Discord identity и актуальные данные Discord-профиля.
+ * Игровой ник хранится как снимок в {@link SeasonPlayerEntity}.</p>
  *
  * <p>Сезонные данные, такие как рейтинг и количество сыгранных матчей,
  * должны храниться отдельно в сущности {@code SeasonPlayerEntity}.</p>
@@ -25,23 +25,16 @@ public class PlayerEntity {
     /**
      * Discord ID пользователя.
      *
-     * <p>Может быть {@code null}, если игрок ещё не прошёл регистрацию
-     * и не привязал Discord-аккаунт.</p>
+     * <p>Это единственный стабильный внешний идентификатор игрока.</p>
      */
     @Column(name = "discord_id", unique = true)
     private Long discordId;
 
     /**
-     * Игровой никнейм игрока.
+     * Актуальный Discord username. Не используется как identity.
      */
     @Column(name = "username", nullable = false)
     private String username;
-
-    /**
-     * Отображаемое имя игрока.
-     */
-    @Column(name = "display_name", nullable = false)
-    private String displayName;
 
     /**
      * Конструктор без параметров, необходимый JPA.
@@ -50,14 +43,14 @@ public class PlayerEntity {
     }
 
     /**
-     * Создаёт игрока без привязанного Discord-аккаунта.
+     * Создаёт постоянный профиль Discord-пользователя.
      *
-     * @param username игровой никнейм игрока
-     * @param displayName отображаемое имя игрока
+     * @param discordId Discord ID пользователя
+     * @param username актуальный Discord username
      */
-    public PlayerEntity(String username, String displayName) {
+    public PlayerEntity(Long discordId, String username) {
+        this.discordId = discordId;
         this.username = username;
-        this.displayName = displayName;
     }
 
     /**
@@ -68,8 +61,7 @@ public class PlayerEntity {
     }
 
     /**
-     * @return Discord ID игрока или {@code null},
-     * если Discord-аккаунт ещё не привязан
+     * @return Discord ID игрока
      */
     public Long getDiscordId() {
         return discordId;
@@ -85,30 +77,17 @@ public class PlayerEntity {
     }
 
     /**
-     * @return игровой никнейм игрока
+     * @return актуальный Discord username
      */
     public String getUsername() {
         return username;
     }
 
     /**
-     * @param username новый игровой никнейм игрока
+     * @param username новый Discord username
      */
     public void setUsername(String username) {
         this.username = username;
     }
 
-    /**
-     * @return отображаемое имя игрока
-     */
-    public String getDisplayName() {
-        return displayName;
-    }
-
-    /**
-     * @param displayName новое отображаемое имя игрока
-     */
-    public void setDisplayName(String displayName) {
-        this.displayName = displayName;
-    }
 }

@@ -60,14 +60,14 @@ public class MatchService {
         PlayerEntity reporter = findPlayerByDiscordId(reporterDiscordId);
         PlayerEntity opponent = findPlayerByDiscordId(opponentDiscordId);
         SeasonEntity season = seasonService.getCurrentSeasonEntity();
-        findSeasonPlayer(season, reporter);
-        findSeasonPlayer(season, opponent);
+        SeasonPlayerEntity reporterSeasonPlayer = findSeasonPlayer(season, reporter);
+        SeasonPlayerEntity opponentSeasonPlayer = findSeasonPlayer(season, opponent);
 
         return new MatchReportPreviewDto(
                 reporterDiscordId,
                 opponentDiscordId,
-                reporter.getDisplayName(),
-                opponent.getDisplayName(),
+                reporterSeasonPlayer.getDisplayName(),
+                opponentSeasonPlayer.getDisplayName(),
                 reporterScore,
                 opponentScore
         );
@@ -139,14 +139,14 @@ public class MatchService {
         MatchEntity saved = matchRepository.save(match);
 
         log.info("MATCH SUCCESS [#{}]: {} {}:{} {}", saved.getId(),
-                winnerPlayer.getDisplayName(), winnerScore, loserScore, loserPlayer.getDisplayName());
+                winner.getDisplayName(), winnerScore, loserScore, loser.getDisplayName());
 
         return new MatchResult(
                 saved.getId(),
                 winnerPlayer.getDiscordId(),
-                winnerPlayer.getDisplayName(),
+                winner.getDisplayName(),
                 loserPlayer.getDiscordId(),
-                loserPlayer.getDisplayName(),
+                loser.getDisplayName(),
                 winnerScore,
                 loserScore,
                 deltaWinner,
@@ -216,7 +216,7 @@ public class MatchService {
 
         return new MatchHistoryEntryDto(
                 win,
-                opponent.getPlayer().getDisplayName(),
+                opponent.getDisplayName(),
                 win ? match.getWinnerScore() : match.getLoserScore(),
                 win ? match.getLoserScore() : match.getWinnerScore(),
                 win ? match.getDeltaWinner() : match.getDeltaLoser(),
