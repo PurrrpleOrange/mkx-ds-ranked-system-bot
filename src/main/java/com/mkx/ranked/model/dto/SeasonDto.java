@@ -9,6 +9,8 @@ public record SeasonDto(
         int seasonNumber,
         String name,
         SeasonStatus status,
-        LocalDateTime plannedEndDate
+        LocalDateTime startDate,
+        LocalDateTime plannedEndDate,
+        LocalDateTime endDate
 ) {
 }

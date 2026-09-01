@@ -22,6 +22,18 @@ public interface SeasonPlayerRepository
             PlayerEntity player
     );
 
+    @Query("""
+            select sp
+            from SeasonPlayerEntity sp
+            join fetch sp.player p
+            where sp.season = :season
+              and p.discordId = :discordId
+            """)
+    Optional<SeasonPlayerEntity> findBySeasonAndPlayerDiscordId(
+            @Param("season") SeasonEntity season,
+            @Param("discordId") Long discordId
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select sp
@@ -64,6 +76,15 @@ public interface SeasonPlayerRepository
             order by sp.rating desc, sp.gamesPlayed desc, sp.player.id asc
             """)
     List<SeasonPlayerEntity> findLeaderboardBySeason(@Param("season") SeasonEntity season);
+
+    @Query("""
+            select sp
+            from SeasonPlayerEntity sp
+            join fetch sp.player
+            where sp.season = :season
+            order by sp.finalRank asc
+            """)
+    List<SeasonPlayerEntity> findFinalLeaderboardBySeason(@Param("season") SeasonEntity season);
 
     @Query(
             value = """

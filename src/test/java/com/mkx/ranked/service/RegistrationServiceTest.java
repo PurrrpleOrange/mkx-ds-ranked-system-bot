@@ -43,6 +43,7 @@ class RegistrationServiceTest {
         when(activeSeason.getId()).thenReturn(10L);
         when(activeSeason.getSeasonNumber()).thenReturn(2);
         when(seasonService.getActiveSeasonEntity()).thenReturn(activeSeason);
+        when(seasonService.getActiveSeasonEntityForReadLock()).thenReturn(activeSeason);
     }
 
     @Test
@@ -106,7 +107,7 @@ class RegistrationServiceTest {
 
     @Test
     void registrationRequiresActiveSeason() {
-        when(seasonService.getActiveSeasonEntity()).thenThrow(new SeasonNotActiveException());
+        when(seasonService.getActiveSeasonEntityForReadLock()).thenThrow(new SeasonNotActiveException());
 
         assertThrows(
                 SeasonNotActiveException.class,

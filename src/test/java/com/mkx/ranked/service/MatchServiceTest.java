@@ -1,10 +1,12 @@
 package com.mkx.ranked.service;
 
+import com.mkx.ranked.exception.InvalidMatchException;
 import com.mkx.ranked.model.MatchEntity;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
 import com.mkx.ranked.model.dto.MatchResult;
+import com.mkx.ranked.model.enums.SeasonStatus;
 import com.mkx.ranked.repository.MatchRepository;
 import com.mkx.ranked.repository.PlayerRepository;
 import com.mkx.ranked.repository.SeasonPlayerRepository;
@@ -16,9 +18,11 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,7 +55,7 @@ class MatchServiceTest {
 
         when(playerRepository.findByDiscordId(11L)).thenReturn(Optional.of(winnerPlayer));
         when(playerRepository.findByDiscordId(22L)).thenReturn(Optional.of(loserPlayer));
-        when(seasonService.getCurrentSeasonEntity()).thenReturn(season);
+        when(seasonService.getActiveSeasonEntityForReadLock()).thenReturn(season);
         when(seasonPlayerRepository.findAllBySeasonAndPlayerInForUpdate(
                 any(SeasonEntity.class), any()
         )).thenReturn(List.of(winner, loser));
@@ -76,6 +80,35 @@ class MatchServiceTest {
         assertEquals(-5, persisted.getDeltaLoser());
         assertEquals(5 + persisted.getDeltaLoser(), result.newLoserRating());
         assertEquals(result.newLoserRating() - persisted.getDeltaLoser(), 5);
+    }
+
+    @Test
+    void cannotRevertMatchFromFinishedSeason() {
+        PlayerRepository playerRepository = mock(PlayerRepository.class);
+        SeasonPlayerRepository seasonPlayerRepository = mock(SeasonPlayerRepository.class);
+        MatchRepository matchRepository = mock(MatchRepository.class);
+        SeasonService seasonService = mock(SeasonService.class);
+        MatchService service = new MatchService(
+                playerRepository,
+                seasonPlayerRepository,
+                matchRepository,
+                seasonService
+        );
+
+        SeasonEntity season = mock(SeasonEntity.class);
+        when(season.getStatus()).thenReturn(SeasonStatus.FINISHED);
+        MatchEntity match = mock(MatchEntity.class);
+        when(match.getSeason()).thenReturn(season);
+        when(matchRepository.findByIdForUpdate(501L)).thenReturn(Optional.of(match));
+
+        InvalidMatchException exception = assertThrows(
+                InvalidMatchException.class,
+                () -> service.revertMatch(501L)
+        );
+
+        assertEquals("Cannot revert a match from a FINISHED season.", exception.getMessage());
+        verify(seasonPlayerRepository, never()).findAllByIdInForUpdate(any());
+        verify(matchRepository, never()).delete(any());
     }
 
     private PlayerEntity player(long id, long discordId, String displayName) {

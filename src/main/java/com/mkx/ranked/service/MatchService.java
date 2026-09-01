@@ -12,6 +12,7 @@ import com.mkx.ranked.model.dto.MatchHistoryEntryDto;
 import com.mkx.ranked.model.dto.MatchReportPreviewDto;
 import com.mkx.ranked.model.dto.MatchResult;
 import com.mkx.ranked.model.dto.PageDto;
+import com.mkx.ranked.model.enums.SeasonStatus;
 import com.mkx.ranked.repository.MatchRepository;
 import com.mkx.ranked.repository.PlayerRepository;
 import com.mkx.ranked.repository.SeasonPlayerRepository;
@@ -100,7 +101,7 @@ public class MatchService {
 
         PlayerEntity winnerPlayer = findPlayerByDiscordId(winnerDiscordId);
         PlayerEntity loserPlayer = findPlayerByDiscordId(loserDiscordId);
-        SeasonEntity season = seasonService.getCurrentSeasonEntity();
+        SeasonEntity season = seasonService.getActiveSeasonEntityForReadLock();
         LockedParticipants participants = findSeasonPlayersForUpdate(season, winnerPlayer, loserPlayer);
         SeasonPlayerEntity winner = participants.get(winnerPlayer);
         SeasonPlayerEntity loser = participants.get(loserPlayer);
@@ -160,6 +161,15 @@ public class MatchService {
     public void revertMatch(Long matchId) {
         MatchEntity match = matchRepository.findByIdForUpdate(matchId)
                 .orElseThrow(() -> new MatchNotFoundException(matchId));
+
+        if (match.getSeason().getStatus() == SeasonStatus.FINISHED) {
+            throw new InvalidMatchException("Cannot revert a match from a FINISHED season.");
+        }
+
+        SeasonEntity activeSeason = seasonService.getActiveSeasonEntityForReadLock();
+        if (!activeSeason.getId().equals(match.getSeason().getId())) {
+            throw new InvalidMatchException("Only matches from the ACTIVE season can be reverted.");
+        }
 
         LockedParticipants participants = findSeasonPlayersForUpdate(match.getWinner().getId(), match.getLoser().getId());
         SeasonPlayerEntity winner = participants.get(match.getWinner().getId());

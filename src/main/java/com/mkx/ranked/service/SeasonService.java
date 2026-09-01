@@ -11,6 +11,7 @@ import com.mkx.ranked.repository.SeasonPlayerRepository;
 import com.mkx.ranked.repository.SeasonRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +43,12 @@ public class SeasonService {
     @Transactional(readOnly = true)
     public SeasonEntity getCurrentSeasonEntity() {
         return getActiveSeasonEntity();
+    }
+
+    @Transactional
+    public SeasonEntity getActiveSeasonEntityForReadLock() {
+        return seasonRepository.findByStatusForReadLock(SeasonStatus.ACTIVE)
+                .orElseThrow(SeasonNotActiveException::new);
     }
 
     @Transactional(readOnly = true)
@@ -76,7 +83,7 @@ public class SeasonService {
             throw new BusinessException("Season name must not be blank.");
         }
 
-        int nextSeasonNumber = seasonRepository.findMaxSeasonNumber().orElse(0) + 1;
+        int nextSeasonNumber = Math.toIntExact(seasonRepository.getNextSeasonNumber());
 
         SeasonEntity season = new SeasonEntity(nextSeasonNumber, name.trim(), plannedEndDate);
         SeasonEntity saved = seasonRepository.save(season);
@@ -86,21 +93,22 @@ public class SeasonService {
 
     @Transactional
     public SeasonDto activateSeason(long seasonId) {
-        SeasonEntity season = seasonRepository.findById(seasonId)
+        SeasonEntity season = seasonRepository.findByIdForUpdate(seasonId)
                 .orElseThrow(() -> new SeasonNotFoundException(seasonId));
         return activateSeason(season);
     }
 
     @Transactional
     public SeasonDto activateSeasonByNumber(Integer seasonNumber) {
-        SeasonEntity season = seasonRepository.findBySeasonNumber(seasonNumber)
+        SeasonEntity season = seasonRepository.findBySeasonNumberForUpdate(seasonNumber)
                 .orElseThrow(() -> new SeasonNotFoundException(seasonNumber));
         return activateSeason(season);
     }
 
     @Transactional
     public boolean updatePlannedEndDate(LocalDateTime newPlannedEndDate) {
-        SeasonEntity currentSeason = getCurrentSeasonEntity();
+        SeasonEntity currentSeason = seasonRepository.findByStatusForUpdate(SeasonStatus.ACTIVE)
+                .orElseThrow(SeasonNotActiveException::new);
         currentSeason.setPlannedEndDate(newPlannedEndDate);
         seasonRepository.save(currentSeason);
         log.info("SEASON SUCCESS: updated planned end date for season #{}", currentSeason.getSeasonNumber());
@@ -109,7 +117,8 @@ public class SeasonService {
 
     @Transactional
     public SeasonDto finishActiveSeason() {
-        SeasonEntity currentSeason = getActiveSeasonEntity();
+        SeasonEntity currentSeason = seasonRepository.findByStatusForUpdate(SeasonStatus.ACTIVE)
+                .orElseThrow(SeasonNotActiveException::new);
         return finishSeason(currentSeason);
     }
 
@@ -121,14 +130,14 @@ public class SeasonService {
 
     @Transactional
     public SeasonDto finishSeason(long seasonId) {
-        SeasonEntity season = seasonRepository.findById(seasonId)
+        SeasonEntity season = seasonRepository.findByIdForUpdate(seasonId)
                 .orElseThrow(() -> new SeasonNotFoundException(seasonId));
         return finishSeason(season);
     }
 
     @Transactional
     public SeasonDto finishSeasonByNumber(Integer seasonNumber) {
-        SeasonEntity season = seasonRepository.findBySeasonNumber(seasonNumber)
+        SeasonEntity season = seasonRepository.findBySeasonNumberForUpdate(seasonNumber)
                 .orElseThrow(() -> new SeasonNotFoundException(seasonNumber));
         return finishSeason(season);
     }
@@ -146,7 +155,9 @@ public class SeasonService {
                 season.getSeasonNumber(),
                 season.getName(),
                 season.getStatus(),
-                season.getPlannedEndDate()
+                season.getStartDate(),
+                season.getPlannedEndDate(),
+                season.getEndDate()
         );
     }
 
@@ -161,7 +172,13 @@ public class SeasonService {
 
         season.setStatus(SeasonStatus.ACTIVE);
         season.setStartDate(LocalDateTime.now());
-        SeasonEntity saved = seasonRepository.save(season);
+        season.setEndDate(null);
+        SeasonEntity saved;
+        try {
+            saved = seasonRepository.saveAndFlush(season);
+        } catch (DataIntegrityViolationException exception) {
+            throw new BusinessException("There is already an active ranked season.");
+        }
         log.info("SEASON SUCCESS: activated season #{}", saved.getSeasonNumber());
         return toDto(saved);
     }

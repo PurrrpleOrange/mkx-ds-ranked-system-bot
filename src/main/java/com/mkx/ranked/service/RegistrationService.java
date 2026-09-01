@@ -56,7 +56,7 @@ public class RegistrationService {
         validateDiscordId(discordId);
         String displayName = normalizeGameUsername(requestedUsername);
         String currentDiscordUsername = normalizeDiscordUsername(discordUsername, displayName);
-        SeasonEntity season = seasonService.getActiveSeasonEntity();
+        SeasonEntity season = seasonService.getActiveSeasonEntityForReadLock();
 
         Optional<PlayerEntity> existingPlayer = playerRepository.findByDiscordId(discordId);
         if (existingPlayer.isPresent()

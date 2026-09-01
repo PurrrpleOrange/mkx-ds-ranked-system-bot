@@ -6,6 +6,8 @@ import com.mkx.ranked.model.SeasonPlayerEntity;
 import com.mkx.ranked.model.dto.LeaderboardEntryDto;
 import com.mkx.ranked.model.dto.PageDto;
 import com.mkx.ranked.model.enums.RankTier;
+import com.mkx.ranked.model.enums.SeasonStatus;
+import com.mkx.ranked.exception.BusinessException;
 import com.mkx.ranked.repository.SeasonPlayerRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -64,10 +66,22 @@ public class LeaderboardService {
     }
 
     private List<LeaderboardEntryDto> getLeaderboardForSeason(SeasonEntity season) {
-        List<SeasonPlayerEntity> standings = seasonPlayerRepository.findLeaderboardBySeason(season);
+        boolean finished = season.getStatus() == SeasonStatus.FINISHED;
+        List<SeasonPlayerEntity> standings = finished
+                ? seasonPlayerRepository.findFinalLeaderboardBySeason(season)
+                : seasonPlayerRepository.findLeaderboardBySeason(season);
         return IntStream.range(0, standings.size())
-                .mapToObj(i -> toLeaderboardEntry(standings.get(i), i))
+                .mapToObj(i -> finished
+                        ? toFinalLeaderboardEntry(standings.get(i))
+                        : toLeaderboardEntry(standings.get(i), i))
                 .toList();
+    }
+
+    private LeaderboardEntryDto toFinalLeaderboardEntry(SeasonPlayerEntity seasonPlayer) {
+        if (seasonPlayer.getFinalRank() == null) {
+            throw new BusinessException("Finished season contains a player without final rank.");
+        }
+        return toLeaderboardEntry(seasonPlayer, seasonPlayer.getFinalRank() - 1);
     }
 
     private LeaderboardEntryDto toLeaderboardEntry(SeasonPlayerEntity seasonPlayer, int zeroBasedRank) {
