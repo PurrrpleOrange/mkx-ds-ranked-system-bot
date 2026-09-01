@@ -5,6 +5,7 @@ import com.mkx.ranked.exception.PlayerNotRegisteredException;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
+import com.mkx.ranked.model.dto.AdminPlayerDto;
 import com.mkx.ranked.model.dto.PlayerProfileDto;
 import com.mkx.ranked.model.enums.RankTier;
 import com.mkx.ranked.repository.PlayerRepository;
@@ -50,6 +51,28 @@ public class PlayerService {
                 tier.getName(),
                 tier.getEmoji(),
                 seasonService.toDto(season)
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public AdminPlayerDto getAdminPlayerInfo(long discordId) {
+        PlayerEntity player = findPlayerByDiscordId(discordId);
+        SeasonEntity season = seasonService.getActiveSeasonEntity();
+        SeasonPlayerEntity seasonPlayer = findSeasonPlayer(season, player);
+        int rank = calculateRank(season, seasonPlayer);
+        RankTier tier = RankTier.getTierByRank(rank);
+
+        return new AdminPlayerDto(
+                player.getId(),
+                player.getDiscordId(),
+                player.getUsername(),
+                seasonPlayer.getDisplayName(),
+                seasonPlayer.getRating(),
+                seasonPlayer.getGamesPlayed(),
+                rank,
+                tier.getName(),
+                tier.getEmoji(),
+                season.getSeasonNumber()
         );
     }
 

@@ -9,9 +9,12 @@ import com.mkx.ranked.model.SeasonPlayerEntity;
 import com.mkx.ranked.model.dto.RegistrationResultDto;
 import com.mkx.ranked.repository.PlayerRepository;
 import com.mkx.ranked.repository.SeasonPlayerRepository;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
 import java.util.Optional;
 
 @Service
@@ -73,10 +76,40 @@ public class RegistrationService {
                 .orElseGet(() -> new PlayerEntity(discordId, currentDiscordUsername));
         player.setUsername(currentDiscordUsername);
         PlayerEntity savedPlayer = playerRepository.save(player);
-        SeasonPlayerEntity seasonPlayer = seasonPlayerRepository.save(
-                new SeasonPlayerEntity(savedPlayer, season, displayName)
-        );
+        SeasonPlayerEntity seasonPlayer;
+        try {
+            seasonPlayer = seasonPlayerRepository.saveAndFlush(
+                    new SeasonPlayerEntity(savedPlayer, season, displayName)
+            );
+        } catch (DataIntegrityViolationException exception) {
+            if (isDisplayNameUniqueConstraint(exception)) {
+                throw new BusinessException(
+                        "Username '" + displayName + "' is already registered in the current season."
+                );
+            }
+            throw exception;
+        }
         return toResult(savedPlayer, seasonPlayer, season);
+    }
+
+    private boolean isDisplayNameUniqueConstraint(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof ConstraintViolationException constraintViolation
+                    && "uq_season_player_display_name_ci".equalsIgnoreCase(
+                            constraintViolation.getConstraintName()
+                    )) {
+                return true;
+            }
+
+            String message = current.getMessage();
+            if (message != null
+                    && message.toLowerCase(Locale.ROOT).contains("uq_season_player_display_name_ci")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private RegistrationResultDto toResult(

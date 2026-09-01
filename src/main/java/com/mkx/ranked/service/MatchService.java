@@ -8,6 +8,7 @@ import com.mkx.ranked.model.MatchEntity;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
+import com.mkx.ranked.model.dto.AdminMatchDto;
 import com.mkx.ranked.model.dto.MatchHistoryEntryDto;
 import com.mkx.ranked.model.dto.MatchReportPreviewDto;
 import com.mkx.ranked.model.dto.MatchResult;
@@ -187,6 +188,28 @@ public class MatchService {
         matchRepository.delete(match);
 
         log.info("ADMIN ACTION SUCCESS: reverted match #{}", matchId);
+    }
+
+    @Transactional(readOnly = true)
+    public AdminMatchDto getAdminMatchInfo(long matchId) {
+        MatchEntity match = matchRepository.findById(matchId)
+                .orElseThrow(() -> new MatchNotFoundException(matchId));
+        SeasonPlayerEntity winner = match.getWinner();
+        SeasonPlayerEntity loser = match.getLoser();
+
+        return new AdminMatchDto(
+                match.getId(),
+                match.getSeason().getSeasonNumber(),
+                winner.getDisplayName(),
+                loser.getDisplayName(),
+                winner.getPlayer().getDiscordId(),
+                loser.getPlayer().getDiscordId(),
+                match.getWinnerScore(),
+                match.getLoserScore(),
+                match.getDeltaWinner(),
+                match.getDeltaLoser(),
+                match.getCreatedAt()
+        );
     }
 
     @Transactional(readOnly = true)

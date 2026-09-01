@@ -14,8 +14,6 @@ import org.springframework.stereotype.Component;
 import java.awt.Color;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.List;
 
 @Component
 public class RankedMessageFormatter {
@@ -183,58 +181,6 @@ public class RankedMessageFormatter {
 
         embed.setDescription(description.toString());
         return embed.build();
-    }
-
-    public String fullLeaderboard(List<LeaderboardEntryDto> players) {
-        StringBuilder message = new StringBuilder();
-        message.append("**АКТУАЛЬНЫЙ РЕЙТИНГ MKX RANKED**\n\n");
-
-        for (LeaderboardEntryDto player : players) {
-            message.append(String.format(
-                    "%d. %s - %d (%d %s)%n",
-                    player.rank(),
-                    player.displayName(),
-                    player.rating(),
-                    player.gamesPlayed(),
-                    getGamesWord(player.gamesPlayed())
-            ));
-        }
-
-        return message.toString();
-    }
-
-    public List<String> splitMessage(String message, int maxLength) {
-        List<String> chunks = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-
-        for (String line : message.split("\n")) {
-            if (current.length() + line.length() + 1 > maxLength) {
-                chunks.add(current.toString());
-                current.setLength(0);
-            }
-
-            current.append(line).append("\n");
-        }
-
-        if (!current.isEmpty()) {
-            chunks.add(current.toString());
-        }
-
-        return chunks;
-    }
-
-    private String getGamesWord(int games) {
-        int lastTwoDigits = games % 100;
-
-        if (lastTwoDigits >= 11 && lastTwoDigits <= 14) {
-            return "игр";
-        }
-
-        return switch (games % 10) {
-            case 1 -> "игра";
-            case 2, 3, 4 -> "игры";
-            default -> "игр";
-        };
     }
 
     private String formatDiscordTimestamp(LocalDateTime dateTime) {

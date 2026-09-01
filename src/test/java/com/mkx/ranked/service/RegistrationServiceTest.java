@@ -11,6 +11,7 @@ import com.mkx.ranked.repository.SeasonPlayerRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -51,7 +52,7 @@ class RegistrationServiceTest {
         PlayerEntity savedPlayer = player(1L, 100L, "discord-user");
         when(playerRepository.findByDiscordId(100L)).thenReturn(Optional.empty());
         when(playerRepository.save(any(PlayerEntity.class))).thenReturn(savedPlayer);
-        when(seasonPlayerRepository.save(any(SeasonPlayerEntity.class)))
+        when(seasonPlayerRepository.saveAndFlush(any(SeasonPlayerEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         RegistrationResultDto result = service.register(100L, "discord-user", "  Sub-Zero  ");
@@ -63,7 +64,7 @@ class RegistrationServiceTest {
 
         ArgumentCaptor<SeasonPlayerEntity> participationCaptor =
                 ArgumentCaptor.forClass(SeasonPlayerEntity.class);
-        verify(seasonPlayerRepository).save(participationCaptor.capture());
+        verify(seasonPlayerRepository).saveAndFlush(participationCaptor.capture());
         SeasonPlayerEntity participation = participationCaptor.getValue();
         assertEquals(activeSeason, participation.getSeason());
         assertEquals(savedPlayer, participation.getPlayer());
@@ -79,14 +80,14 @@ class RegistrationServiceTest {
         when(playerRepository.findByDiscordId(100L)).thenReturn(Optional.of(existingPlayer));
         when(playerRepository.save(existingPlayer)).thenReturn(existingPlayer);
         when(seasonPlayerRepository.existsBySeasonAndPlayer(activeSeason, existingPlayer)).thenReturn(false);
-        when(seasonPlayerRepository.save(any(SeasonPlayerEntity.class)))
+        when(seasonPlayerRepository.saveAndFlush(any(SeasonPlayerEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         service.register(100L, "new-discord-name", "ScorpionMain");
 
         verify(playerRepository).save(existingPlayer);
         assertEquals("new-discord-name", existingPlayer.getUsername());
-        verify(seasonPlayerRepository).save(any(SeasonPlayerEntity.class));
+        verify(seasonPlayerRepository).saveAndFlush(any(SeasonPlayerEntity.class));
     }
 
     @Test
@@ -102,7 +103,7 @@ class RegistrationServiceTest {
 
         assertEquals("You are already registered in the current season.", exception.getMessage());
         verify(playerRepository, never()).save(any(PlayerEntity.class));
-        verify(seasonPlayerRepository, never()).save(any(SeasonPlayerEntity.class));
+        verify(seasonPlayerRepository, never()).saveAndFlush(any(SeasonPlayerEntity.class));
     }
 
     @Test
@@ -130,7 +131,7 @@ class RegistrationServiceTest {
         );
 
         verify(playerRepository, never()).save(any(PlayerEntity.class));
-        verify(seasonPlayerRepository, never()).save(any(SeasonPlayerEntity.class));
+        verify(seasonPlayerRepository, never()).saveAndFlush(any(SeasonPlayerEntity.class));
     }
 
     @Test
@@ -140,6 +141,45 @@ class RegistrationServiceTest {
         when(seasonPlayerRepository.existsBySeasonAndPlayer(activeSeason, existingPlayer)).thenReturn(false);
 
         assertFalse(service.isRegistered(100L));
+    }
+
+    @Test
+    void concurrentDisplayNameConflictBecomesBusinessException() {
+        PlayerEntity savedPlayer = player(2L, 200L, "discord-user");
+        when(playerRepository.findByDiscordId(200L)).thenReturn(Optional.empty());
+        when(playerRepository.save(any(PlayerEntity.class))).thenReturn(savedPlayer);
+        when(seasonPlayerRepository.saveAndFlush(any(SeasonPlayerEntity.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "duplicate key violates constraint uq_season_player_display_name_ci"
+                ));
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> service.register(200L, "discord-user", "Scorpion")
+        );
+
+        assertEquals(
+                "Username 'Scorpion' is already registered in the current season.",
+                exception.getMessage()
+        );
+    }
+
+    @Test
+    void unrelatedDataIntegrityViolationIsNotHidden() {
+        PlayerEntity savedPlayer = player(2L, 200L, "discord-user");
+        DataIntegrityViolationException databaseFailure =
+                new DataIntegrityViolationException("players_discord_id_key");
+        when(playerRepository.findByDiscordId(200L)).thenReturn(Optional.empty());
+        when(playerRepository.save(any(PlayerEntity.class))).thenReturn(savedPlayer);
+        when(seasonPlayerRepository.saveAndFlush(any(SeasonPlayerEntity.class)))
+                .thenThrow(databaseFailure);
+
+        DataIntegrityViolationException thrown = assertThrows(
+                DataIntegrityViolationException.class,
+                () -> service.register(200L, "discord-user", "Scorpion")
+        );
+
+        assertEquals(databaseFailure, thrown);
     }
 
     private PlayerEntity player(long id, long discordId, String discordUsername) {

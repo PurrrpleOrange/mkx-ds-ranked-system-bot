@@ -5,6 +5,7 @@ import com.mkx.ranked.model.MatchEntity;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
+import com.mkx.ranked.model.dto.AdminMatchDto;
 import com.mkx.ranked.model.dto.MatchResult;
 import com.mkx.ranked.model.enums.SeasonStatus;
 import com.mkx.ranked.repository.MatchRepository;
@@ -13,6 +14,7 @@ import com.mkx.ranked.repository.SeasonPlayerRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -109,6 +111,58 @@ class MatchServiceTest {
         assertEquals("Cannot revert a match from a FINISHED season.", exception.getMessage());
         verify(seasonPlayerRepository, never()).findAllByIdInForUpdate(any());
         verify(matchRepository, never()).delete(any());
+    }
+
+    @Test
+    void adminMatchInfoMapsLazyGraphInsideMatchService() {
+        PlayerRepository playerRepository = mock(PlayerRepository.class);
+        SeasonPlayerRepository seasonPlayerRepository = mock(SeasonPlayerRepository.class);
+        MatchRepository matchRepository = mock(MatchRepository.class);
+        SeasonService seasonService = mock(SeasonService.class);
+        MatchService service = new MatchService(
+                playerRepository,
+                seasonPlayerRepository,
+                matchRepository,
+                seasonService
+        );
+
+        PlayerEntity winnerPlayer = player(1L, 11L, "Winner Discord");
+        PlayerEntity loserPlayer = player(2L, 22L, "Loser Discord");
+        SeasonEntity season = mock(SeasonEntity.class);
+        SeasonPlayerEntity winner = mock(SeasonPlayerEntity.class);
+        SeasonPlayerEntity loser = mock(SeasonPlayerEntity.class);
+        MatchEntity match = mock(MatchEntity.class);
+        LocalDateTime createdAt = LocalDateTime.of(2026, 8, 31, 20, 30);
+
+        when(season.getSeasonNumber()).thenReturn(9);
+        when(winner.getDisplayName()).thenReturn("Sub-Zero");
+        when(winner.getPlayer()).thenReturn(winnerPlayer);
+        when(loser.getDisplayName()).thenReturn("Scorpion");
+        when(loser.getPlayer()).thenReturn(loserPlayer);
+        when(match.getId()).thenReturn(501L);
+        when(match.getSeason()).thenReturn(season);
+        when(match.getWinner()).thenReturn(winner);
+        when(match.getLoser()).thenReturn(loser);
+        when(match.getWinnerScore()).thenReturn(5);
+        when(match.getLoserScore()).thenReturn(3);
+        when(match.getDeltaWinner()).thenReturn(21);
+        when(match.getDeltaLoser()).thenReturn(-21);
+        when(match.getCreatedAt()).thenReturn(createdAt);
+        when(matchRepository.findById(501L)).thenReturn(Optional.of(match));
+
+        AdminMatchDto result = service.getAdminMatchInfo(501L);
+
+        assertEquals(501L, result.matchId());
+        assertEquals(9, result.seasonNumber());
+        assertEquals("Sub-Zero", result.winnerDisplayName());
+        assertEquals("Scorpion", result.loserDisplayName());
+        assertEquals(11L, result.winnerDiscordId());
+        assertEquals(22L, result.loserDiscordId());
+        assertEquals(5, result.winnerScore());
+        assertEquals(3, result.loserScore());
+        assertEquals(21, result.deltaWinner());
+        assertEquals(-21, result.deltaLoser());
+        assertEquals(createdAt, result.createdAt());
     }
 
     private PlayerEntity player(long id, long discordId, String displayName) {

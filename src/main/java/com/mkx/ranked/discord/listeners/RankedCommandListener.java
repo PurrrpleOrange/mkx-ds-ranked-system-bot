@@ -12,7 +12,6 @@ import com.mkx.ranked.service.LeaderboardService;
 import com.mkx.ranked.service.MatchService;
 import com.mkx.ranked.service.PlayerService;
 import com.mkx.ranked.service.RegistrationService;
-import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.components.label.Label;
@@ -30,8 +29,6 @@ import net.dv8tion.jda.api.modals.Modal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
 
 @Component
 public class RankedCommandListener extends ListenerAdapter {
@@ -140,7 +137,6 @@ public class RankedCommandListener extends ListenerAdapter {
         }
 
         switch (componentId) {
-            case "btn:admin_send_rating" -> handleAdminSendRating(event);
             case "btn:match_history" -> handleMatchHistoryPage(event, 0, false);
             case "btn:leaderboard" -> handleLeaderboardPage(event, 0, false);
             case "btn:report_match" -> handleReportMatchButton(event);
@@ -207,19 +203,6 @@ public class RankedCommandListener extends ListenerAdapter {
             Button reportBtn = Button.primary("btn:report_match", "Внести результат");
             Button historyBtn = Button.secondary("btn:match_history", "История матчей");
             Button topBtn = Button.secondary("btn:leaderboard", "Топ игроков");
-            Button adminRatingBtn = Button.primary("btn:admin_send_rating", "Отправить рейтинг");
-
-            if (event.getMember() != null && event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
-                event.replyEmbeds(formatter.rankedMenu(profile))
-                        .setComponents(
-                                ActionRow.of(reportBtn, historyBtn, topBtn),
-                                ActionRow.of(adminRatingBtn)
-                        )
-                        .setEphemeral(true)
-                        .queue();
-                return;
-            }
-
             event.replyEmbeds(formatter.rankedMenu(profile))
                     .setComponents(ActionRow.of(reportBtn, historyBtn, topBtn))
                     .setEphemeral(true)
@@ -231,34 +214,6 @@ public class RankedCommandListener extends ListenerAdapter {
         } catch (Exception e) {
             log.error("DISCORD ERROR: failed to execute /ranked", e);
             event.reply(errorMessageMapper.internalError())
-                    .setEphemeral(true)
-                    .queue();
-        }
-    }
-
-    private void handleAdminSendRating(ButtonInteractionEvent event) {
-        if (event.getMember() == null || !event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
-            event.reply("Кнопка доступна только администраторам.")
-                    .setEphemeral(true)
-                    .queue();
-            return;
-        }
-
-        try {
-            List<LeaderboardEntryDto> players = leaderboardService.getFullLeaderboardForActiveSeason();
-            List<String> chunks = formatter.splitMessage(formatter.fullLeaderboard(players), 1900);
-
-            event.deferEdit().queue();
-            for (String chunk : chunks) {
-                event.getChannel().sendMessage(chunk).queue();
-            }
-        } catch (BusinessException e) {
-            event.reply(errorMessageMapper.toUserMessage(e))
-                    .setEphemeral(true)
-                    .queue();
-        } catch (Exception e) {
-            log.error("ADMIN ERROR: failed to send leaderboard", e);
-            event.reply("Не удалось отправить рейтинг.")
                     .setEphemeral(true)
                     .queue();
         }
