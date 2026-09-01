@@ -1,15 +1,17 @@
 package com.mkx.ranked.service;
 
-import com.mkx.ranked.config.DatabaseManager;
-import com.mkx.ranked.model.PlayerEntity;
+import com.mkx.ranked.exception.SeasonNotActiveException;
+import com.mkx.ranked.exception.SeasonNotFoundException;
 import com.mkx.ranked.model.SeasonEntity;
-import com.mkx.ranked.repository.PlayerRepository;
-import org.hibernate.Session;
-import org.hibernate.Transaction;
-import org.hibernate.query.Query;
+import com.mkx.ranked.model.SeasonPlayerEntity;
+import com.mkx.ranked.model.dto.SeasonDto;
+import com.mkx.ranked.model.enums.SeasonStatus;
+import com.mkx.ranked.repository.SeasonPlayerRepository;
+import com.mkx.ranked.repository.SeasonRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -17,125 +19,85 @@ import java.util.List;
 @Service
 public class SeasonService {
 
-    private static final Logger log =
-            LoggerFactory.getLogger(SeasonService.class);
+    private static final Logger log = LoggerFactory.getLogger(SeasonService.class);
 
-    private final PlayerRepository playerRepository;
+    private final SeasonRepository seasonRepository;
+    private final SeasonPlayerRepository seasonPlayerRepository;
 
-    public SeasonService(PlayerRepository playerRepository) {
-        this.playerRepository = playerRepository;
+    public SeasonService(
+            SeasonRepository seasonRepository,
+            SeasonPlayerRepository seasonPlayerRepository
+    ) {
+        this.seasonRepository = seasonRepository;
+        this.seasonPlayerRepository = seasonPlayerRepository;
     }
 
-    /**
-     * Получает текущий активный сезон.
-     */
-    public SeasonEntity getCurrentSeason() {
-        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
-            String hql = "FROM SeasonEntity s WHERE s.endDate IS NULL ORDER BY s.seasonNumber DESC";
-            Query<SeasonEntity> query = session.createQuery(hql, SeasonEntity.class);
-            query.setMaxResults(1);
-
-            return query.uniqueResultOptional()
-                    .orElseThrow(() -> new IllegalStateException("Активный сезон не найден! Создайте новый сезон через админ-панель."));
-        }
+    @Transactional(readOnly = true)
+    public SeasonEntity getCurrentSeasonEntity() {
+        return seasonRepository.findFirstByStatusOrderBySeasonNumberDesc(SeasonStatus.ACTIVE)
+                .orElseThrow(SeasonNotActiveException::new);
     }
 
-    /**
-     * Создает и открывает НОВЫЙ сезон с плановой датой окончания.
-     */
-    public SeasonEntity createNewSeason(String name, LocalDateTime plannedEndDate) {
-        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
-            Transaction tx = session.beginTransaction();
-
-            String hql = "SELECT MAX(s.seasonNumber) FROM SeasonEntity s";
-            Query<Integer> query = session.createQuery(hql, Integer.class);
-            Integer maxSeasonNumber = query.uniqueResult();
-            int nextSeasonNumber = (maxSeasonNumber == null) ? 1 : maxSeasonNumber + 1;
-
-            SeasonEntity newSeason = new SeasonEntity(nextSeasonNumber, name, plannedEndDate);
-            session.persist(newSeason);
-
-            tx.commit();
-            log.info("SEASON SUCCESS: Создан новый Сезон #{} ('{}'), Плановый конец: {}",
-                    nextSeasonNumber, name, plannedEndDate);
-            return newSeason;
-        } catch (Exception e) {
-            log.error("SEASON ERROR: Ошибка при создании нового сезона", e);
-            throw e;
-        }
+    @Transactional(readOnly = true)
+    public SeasonDto getCurrentSeason() {
+        return toDto(getCurrentSeasonEntity());
     }
 
-    /**
-     * Позволяет админу изменить планируемую дату окончания текущего сезона.
-     */
+    @Transactional
+    public SeasonDto createNewSeason(String name, LocalDateTime plannedEndDate) {
+        int nextSeasonNumber = seasonRepository.findMaxSeasonNumber().orElse(0) + 1;
+
+        SeasonEntity season = new SeasonEntity(nextSeasonNumber, name, plannedEndDate);
+        season.setStatus(SeasonStatus.ACTIVE);
+        season.setStartDate(LocalDateTime.now());
+
+        SeasonEntity saved = seasonRepository.save(season);
+        log.info("SEASON SUCCESS: created active season #{} ({})", saved.getSeasonNumber(), saved.getName());
+        return toDto(saved);
+    }
+
+    @Transactional
     public boolean updatePlannedEndDate(LocalDateTime newPlannedEndDate) {
-        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
-            Transaction tx = session.beginTransaction();
-
-            SeasonEntity currentSeason = getCurrentSeason();
-            currentSeason.setPlannedEndDate(newPlannedEndDate);
-            session.merge(currentSeason);
-
-            tx.commit();
-            log.info("SEASON SUCCESS: Изменена планируемая дата окончания сезона #{} на {}",
-                    currentSeason.getSeasonNumber(), newPlannedEndDate);
-            return true;
-        } catch (Exception e) {
-            log.error("SEASON ERROR: Не удалось обновить плановую дату окончания", e);
-            return false;
-        }
+        SeasonEntity currentSeason = getCurrentSeasonEntity();
+        currentSeason.setPlannedEndDate(newPlannedEndDate);
+        seasonRepository.save(currentSeason);
+        log.info("SEASON SUCCESS: updated planned end date for season #{}", currentSeason.getSeasonNumber());
+        return true;
     }
 
-    /**
-     * Завершает текущий активный сезон:
-     * 1. Фиксирует дату закрытия
-     * 2. Архивирует результаты игроков в season_history
-     * 3. Сбрасывает статистику активных игроков
-     */
+    @Transactional
     public boolean endCurrentSeason() {
-        log.warn("ADMIN ACTION: Запущен процесс закрытия текущего сезона!");
+        SeasonEntity currentSeason = getCurrentSeasonEntity();
+        List<SeasonPlayerEntity> standings =
+                seasonPlayerRepository.findAllBySeasonOrderByRatingDesc(currentSeason);
 
-        try (Session session = DatabaseManager.getSessionFactory().openSession()) {
-            Transaction tx = session.beginTransaction();
-
-            SeasonEntity currentSeason = getCurrentSeason();
-
-            // 1. Фиксируем дату закрытия сезона
-            currentSeason.setEndDate(LocalDateTime.now());
-            session.merge(currentSeason);
-
-            // 2. Сохраняем снимки рейтинга в Зал Славы (season_history)
-            archiveSeasonHistory(session, currentSeason);
-
-            // 3. Вызываем отдельный метод сброса статистики игроков
-            playerRepository.resetAllPlayerStats(session);
-
-            tx.commit();
-            log.info("SEASON SUCCESS: Сезон #{} успешно закрыт.", currentSeason.getSeasonNumber());
-            return true;
-        } catch (Exception e) {
-            log.error("SEASON ERROR: Ошибка при завершении сезона", e);
-            return false;
+        for (int i = 0; i < standings.size(); i++) {
+            standings.get(i).setFinalRank(i + 1);
         }
+
+        currentSeason.setStatus(SeasonStatus.FINISHED);
+        currentSeason.setEndDate(LocalDateTime.now());
+        seasonPlayerRepository.saveAll(standings);
+        seasonRepository.save(currentSeason);
+
+        log.info("SEASON SUCCESS: finished season #{}", currentSeason.getSeasonNumber());
+        return true;
     }
 
-    /**
-     * Вспомогательный приватный метод для архивации профилей игроков текущего сезона.
-     */
-    private void archiveSeasonHistory(Session session, SeasonEntity currentSeason) {
-        List<PlayerEntity> sortedPlayers = playerRepository.getAllPlayersSorted();
-        int currentRank = 1;
+    @Transactional(readOnly = true)
+    public SeasonDto findSeason(Integer seasonNumber) {
+        return seasonRepository.findBySeasonNumber(seasonNumber)
+                .map(this::toDto)
+                .orElseThrow(() -> new SeasonNotFoundException(seasonNumber));
+    }
 
-        for (PlayerEntity player : sortedPlayers) {
-            SeasonHistoryEntity history = new SeasonHistoryEntity();
-            history.setSeason(currentSeason);
-            history.setDiscordId(player.getDiscordId());
-            history.setUsername(player.getDisplayName());
-            history.setFinalRating(player.getRating());
-            history.setGamesPlayed(player.getGamesPlayed());
-            history.setFinalRank(currentRank++);
-
-            session.persist(history);
-        }
+    SeasonDto toDto(SeasonEntity season) {
+        return new SeasonDto(
+                season.getId(),
+                season.getSeasonNumber(),
+                season.getName(),
+                season.getStatus(),
+                season.getPlannedEndDate()
+        );
     }
 }

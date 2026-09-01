@@ -3,6 +3,8 @@ package com.mkx.ranked.repository;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -25,7 +27,17 @@ public interface SeasonPlayerRepository
             SeasonEntity season
     );
 
+    Page<SeasonPlayerEntity> findAllBySeason(
+            SeasonEntity season,
+            Pageable pageable
+    );
+
     List<SeasonPlayerEntity> findAllByPlayerOrderBySeason_SeasonNumberDesc(
             PlayerEntity player
+    );
+
+    long countBySeasonAndRatingGreaterThan(
+            SeasonEntity season,
+            Integer rating
     );
 }

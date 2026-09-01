@@ -16,7 +16,7 @@ import jakarta.persistence.*;
         name = "season_players",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "uk_season_player",
+                        name = "uq_season_player",
                         columnNames = {"season_id", "player_id"}
                 )
         }

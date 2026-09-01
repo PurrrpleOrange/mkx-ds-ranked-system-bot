@@ -3,8 +3,6 @@ package com.mkx.ranked.config;
 import com.mkx.ranked.discord.listeners.MatchConfirmationListener;
 import com.mkx.ranked.discord.listeners.ModalInteractionListener;
 import com.mkx.ranked.discord.listeners.RankedCommandListener;
-import com.mkx.ranked.repository.PlayerRepository;
-import com.mkx.ranked.service.MatchService;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
