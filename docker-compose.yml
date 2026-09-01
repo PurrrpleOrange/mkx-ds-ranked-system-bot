@@ -5,11 +5,28 @@ services:
     environment:
       POSTGRES_DB: mkx_ranked
       POSTGRES_USER: mkx
-      POSTGRES_PASSWORD: mkx
-    ports:
-      - "5433:5432"
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - mkx_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mkx -d mkx_ranked"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  bot:
+    build: .
+    container_name: mkx-ranked-bot
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/mkx_ranked
+      DB_USERNAME: mkx
+      DB_PASSWORD: ${DB_PASSWORD}
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   mkx_postgres_data:
