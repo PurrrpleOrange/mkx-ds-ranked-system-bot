@@ -47,6 +47,34 @@ class RankedMessageFormatterTest {
     }
 
     @Test
+    void rankedMenuUsesCompactSeasonProfileLayout() {
+        SeasonDto season = new SeasonDto(
+                40L,
+                4,
+                "Moscow Kombat",
+                SeasonStatus.ACTIVE,
+                null,
+                LocalDateTime.of(2026, 12, 1, 20, 0),
+                null
+        );
+        PlayerProfileDto profile = new PlayerProfileDto(
+                1L, 11L, "Sub-Zero", 999, 3, 10, "S-Tier", "🥇", season
+        );
+
+        var embed = formatter.rankedMenu(profile);
+        String description = embed.getDescription();
+
+        assertEquals("Season #4", embed.getTitle());
+        assertTrue(description.startsWith("**Moscow Kombat**"));
+        assertTrue(description.contains("Привет, **Sub-Zero**!"));
+        assertTrue(description.contains("🥇 **S-Tier**"));
+        assertTrue(description.contains(
+                "**Твой MMR:** `999` • **Место в топе:** **#10** • **Сыграно игр:** 3"
+        ));
+        assertTrue(description.contains("*Дата окончания сезона:"));
+    }
+
+    @Test
     void fullMatchHistoryShowsEveryMatchIdWithoutPagination() {
         List<MatchHistoryEntryDto> matches = List.of(
                 new MatchHistoryEntryDto(

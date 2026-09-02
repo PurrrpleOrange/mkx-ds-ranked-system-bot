@@ -28,31 +28,33 @@ public class RankedMessageFormatter {
     private static final String ANSI_RESET = "\u001B[0m";
     private static final String ANSI_WIN = "\u001B[1;37;42mWIN " + ANSI_RESET;
     private static final String ANSI_LOSE = "\u001B[1;37;41mLOSE" + ANSI_RESET;
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
     public MessageEmbed rankedMenu(PlayerProfileDto profile) {
         EmbedBuilder embed = new EmbedBuilder();
         String rank = profile.rank() == null ? "Без ранга" : "#" + profile.rank();
-        embed.setTitle("Mortal Kombat X - Ranked Season #" + profile.season().seasonNumber());
+        embed.setTitle("Mortal Kombat X - " + profile.season().name());
         embed.setColor(INFORMATION_COLOR);
         embed.setDescription("""
+               
                 Привет, **%s**!
+                
+                %s **%s**
+                Твой MMR: `%d`
+                Место в топе: %s
+                Сыграно игр: %d
 
-                **Твой MMR:** `%d`
-                **Место в топе:** **%s**
-                **Сыграно игр:** %d
-                **Дивизион:** %s %s
-
-                **Сезон:** %s
-                **Окончание:** %s
+                *Дата начала сезона: %s*
+                *Дата окончания сезона: %s*
                 """.formatted(
                 profile.displayName(),
+                profile.tierEmoji(),
+                profile.tierName(),
                 profile.rating(),
                 rank,
                 profile.gamesPlayed(),
-                profile.tierEmoji(),
-                profile.tierName(),
-                profile.season().name(),
-                formatDiscordTimestamp(profile.season().plannedEndDate())
+                formatDate(profile.season().startDate()),
+                formatDate(profile.season().plannedEndDate())
         ));
         return embed.build();
     }
@@ -223,5 +225,11 @@ public class RankedMessageFormatter {
 
         long epochSecond = dateTime.atZone(ZoneId.systemDefault()).toEpochSecond();
         return "<t:" + epochSecond + ":F> (<t:" + epochSecond + ":R>)";
+    }
+
+    private String formatDate(LocalDateTime dateTime) {
+        return dateTime == null
+                ? "не указано"
+                : dateTime.format(DATE_FORMAT);
     }
 }

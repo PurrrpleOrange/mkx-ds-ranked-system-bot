@@ -23,6 +23,7 @@ import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEve
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.EntitySelectInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import net.dv8tion.jda.api.interactions.modals.ModalMapping;
 import net.dv8tion.jda.api.modals.Modal;
 import org.slf4j.Logger;
@@ -82,6 +83,10 @@ public class RankedCommandListener extends ListenerAdapter {
 
     @Override
     public void onModalInteraction(ModalInteractionEvent event) {
+        if (event.getModalId().equals("modal:edit_profile")) {
+            updateProfile(event);
+            return;
+        }
         if (!event.getModalId().equals("modal:register_user")) {
             return;
         }
@@ -115,9 +120,12 @@ public class RankedCommandListener extends ListenerAdapter {
         String componentId = event.getComponentId();
 
         switch (componentId) {
-            case "btn:match_history" -> handleMatchHistory(event);
+            case "btn:match_history" -> openMatchHistoryMenu(event);
+            case "btn:history:self" -> showOwnMatchHistory(event);
+            case "btn:history:player" -> openHistoryPlayerSelect(event);
             case "btn:leaderboard" -> handleLeaderboard(event);
             case "btn:report_match" -> handleReportMatchButton(event);
+            case "btn:edit_profile" -> openProfileEditModal(event);
             default -> {
             }
         }
@@ -125,10 +133,15 @@ public class RankedCommandListener extends ListenerAdapter {
 
     @Override
     public void onEntitySelectInteraction(EntitySelectInteractionEvent event) {
-        if (!event.getComponentId().equals("select:opponent_report")) {
-            return;
+        switch (event.getComponentId()) {
+            case "select:opponent_report" -> handleOpponentSelection(event);
+            case "select:history_player" -> showSelectedPlayerMatchHistory(event);
+            default -> {
+            }
         }
+    }
 
+    private void handleOpponentSelection(EntitySelectInteractionEvent event) {
         if (event.getMentions().getUsers().isEmpty()) {
             event.reply("Соперник не выбран. Откройте форму матча заново.")
                     .setEphemeral(true)
@@ -178,11 +191,8 @@ public class RankedCommandListener extends ListenerAdapter {
         try {
             PlayerProfileDto profile = playerService.getProfile(event.getUser().getIdLong());
 
-            Button reportBtn = Button.primary("btn:report_match", "Внести результат");
-            Button historyBtn = Button.secondary("btn:match_history", "История матчей");
-            Button topBtn = Button.secondary("btn:leaderboard", "Топ игроков");
             event.replyEmbeds(formatter.rankedMenu(profile))
-                    .setComponents(ActionRow.of(reportBtn, historyBtn, topBtn))
+                    .setComponents(rankedMenuRows())
                     .setEphemeral(true)
                     .queue();
         } catch (BusinessException e) {
@@ -197,11 +207,59 @@ public class RankedCommandListener extends ListenerAdapter {
         }
     }
 
-    private void handleMatchHistory(ButtonInteractionEvent event) {
+    private void openMatchHistoryMenu(ButtonInteractionEvent event) {
+        event.reply("Какую историю матчей показать?")
+                .setComponents(ActionRow.of(
+                        Button.primary("btn:history:self", "Моя история"),
+                        Button.secondary("btn:history:player", "История игрока")
+                ))
+                .setEphemeral(true)
+                .queue();
+    }
+
+    private void showOwnMatchHistory(ButtonInteractionEvent event) {
+        showMatchHistory(
+                event,
+                event.getUser().getIdLong(),
+                "У вас пока нет сыгранных матчей в текущем сезоне."
+        );
+    }
+
+    private void openHistoryPlayerSelect(ButtonInteractionEvent event) {
+        EntitySelectMenu playerSelect = EntitySelectMenu.create(
+                        "select:history_player",
+                        EntitySelectMenu.SelectTarget.USER
+                )
+                .setPlaceholder("Выберите игрока")
+                .build();
+
+        event.reply("Выберите игрока, историю которого хотите посмотреть.")
+                .setComponents(ActionRow.of(playerSelect))
+                .setEphemeral(true)
+                .queue();
+    }
+
+    private void showSelectedPlayerMatchHistory(EntitySelectInteractionEvent event) {
+        if (event.getMentions().getUsers().isEmpty()) {
+            event.reply("Игрок не выбран. Откройте выбор истории заново.")
+                    .setEphemeral(true)
+                    .queue();
+            return;
+        }
+
+        User selectedPlayer = event.getMentions().getUsers().get(0);
+        showMatchHistory(
+                event,
+                selectedPlayer.getIdLong(),
+                "У выбранного игрока пока нет сыгранных матчей в текущем сезоне."
+        );
+    }
+
+    private void showMatchHistory(IReplyCallback event, long discordId, String emptyMessage) {
         try {
-            List<MatchHistoryEntryDto> history = matchService.getFullMatchHistory(event.getUser().getIdLong());
+            List<MatchHistoryEntryDto> history = matchService.getFullMatchHistory(discordId);
             if (history.isEmpty()) {
-                event.reply("У вас пока нет сыгранных матчей в текущем сезоне.")
+                event.reply(emptyMessage)
                         .setEphemeral(true)
                         .queue();
                 return;
@@ -210,7 +268,7 @@ public class RankedCommandListener extends ListenerAdapter {
         } catch (BusinessException e) {
             event.reply(errorMessageMapper.toUserMessage(e)).setEphemeral(true).queue();
         } catch (Exception e) {
-            log.error("BUTTON ERROR: failed to render match history", e);
+            log.error("INTERACTION ERROR: failed to render match history for Discord ID {}", discordId, e);
             event.reply(errorMessageMapper.internalError()).setEphemeral(true).queue();
         }
     }
@@ -231,7 +289,7 @@ public class RankedCommandListener extends ListenerAdapter {
         }
     }
 
-    private void replyChunks(ButtonInteractionEvent event, List<String> chunks) {
+    private void replyChunks(IReplyCallback event, List<String> chunks) {
         event.reply(chunks.get(0)).setEphemeral(true).queue(hook -> {
             hook.setEphemeral(true);
             for (int i = 1; i < chunks.size(); i++) {
@@ -250,5 +308,66 @@ public class RankedCommandListener extends ListenerAdapter {
                 .setComponents(ActionRow.of(opponentSelect))
                 .setEphemeral(true)
                 .queue();
+    }
+
+    private void openProfileEditModal(ButtonInteractionEvent event) {
+        try {
+            PlayerProfileDto profile = playerService.getProfile(event.getUser().getIdLong());
+            String currentDisplayName = profile.displayName();
+            String initialValue = currentDisplayName.substring(
+                    0,
+                    Math.min(currentDisplayName.length(), 32)
+            );
+            TextInput nicknameInput = TextInput.create("input:profile_nickname", TextInputStyle.SHORT)
+                    .setValue(initialValue)
+                    .setRequired(true)
+                    .setRequiredRange(2, 32)
+                    .build();
+            Modal modal = Modal.create("modal:edit_profile", "Изменение игрового профиля")
+                    .addComponents(Label.of("Новый игровой никнейм", nicknameInput))
+                    .build();
+
+            event.replyModal(modal).queue();
+        } catch (BusinessException e) {
+            event.reply(errorMessageMapper.toUserMessage(e)).setEphemeral(true).queue();
+        } catch (Exception e) {
+            log.error("PROFILE ERROR: failed to open profile editor", e);
+            event.reply(errorMessageMapper.internalError()).setEphemeral(true).queue();
+        }
+    }
+
+    private void updateProfile(ModalInteractionEvent event) {
+        try {
+            ModalMapping nicknameMapping = event.getValue("input:profile_nickname");
+            if (nicknameMapping == null) {
+                event.reply("Не указан новый игровой ник.").setEphemeral(true).queue();
+                return;
+            }
+
+            long discordId = event.getUser().getIdLong();
+            registrationService.updateCurrentSeasonDisplayName(
+                    discordId,
+                    nicknameMapping.getAsString()
+            );
+            PlayerProfileDto profile = playerService.getProfile(discordId);
+            event.replyEmbeds(formatter.rankedMenu(profile))
+                    .setComponents(rankedMenuRows())
+                    .setEphemeral(true)
+                    .queue();
+        } catch (BusinessException e) {
+            event.reply(errorMessageMapper.toUserMessage(e)).setEphemeral(true).queue();
+        } catch (Exception e) {
+            log.error("PROFILE ERROR: failed to update display name", e);
+            event.reply(errorMessageMapper.internalError()).setEphemeral(true).queue();
+        }
+    }
+
+    private List<ActionRow> rankedMenuRows() {
+        return List.of(ActionRow.of(
+                Button.primary("btn:report_match", "Внести результат"),
+                Button.secondary("btn:match_history", "История матчей"),
+                Button.secondary("btn:leaderboard", "Топ игроков"),
+                Button.secondary("btn:edit_profile", "Изменить профиль")
+        ));
     }
 }
