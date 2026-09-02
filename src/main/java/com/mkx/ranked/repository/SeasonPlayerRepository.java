@@ -75,6 +75,15 @@ public interface SeasonPlayerRepository
             from SeasonPlayerEntity sp
             join fetch sp.player
             where sp.season = :season
+            order by lower(sp.displayName) asc, sp.player.id asc
+            """)
+    List<SeasonPlayerEntity> findAllRegisteredBySeason(@Param("season") SeasonEntity season);
+
+    @Query("""
+            select sp
+            from SeasonPlayerEntity sp
+            join fetch sp.player
+            where sp.season = :season
               and sp.gamesPlayed > 0
             order by sp.rating desc, sp.gamesPlayed desc, sp.player.id asc
             """)

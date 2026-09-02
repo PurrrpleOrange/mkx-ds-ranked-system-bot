@@ -115,9 +115,19 @@ class ServicePostgreSqlIntegrationTest extends PostgreSqlIntegrationTestSupport 
         register(11L, "First");
         register(22L, "Second");
         register(33L, "Third");
+        register(44L, "Unplayed");
         setStanding(season.id(), 11L, 1200, 8);
         setStanding(season.id(), 22L, 1200, 10);
         setStanding(season.id(), 33L, 1200, 10);
+
+        SeasonEntity seasonEntity = seasonRepository.findById(season.id()).orElseThrow();
+        assertEquals(
+                List.of("First", "Second", "Third", "Unplayed"),
+                seasonPlayerRepository.findAllRegisteredBySeason(seasonEntity)
+                        .stream()
+                        .map(SeasonPlayerEntity::getDisplayName)
+                        .toList()
+        );
 
         List<Long> expectedOrder = List.of(
                 playerRepository.findByDiscordId(22L).orElseThrow().getId(),
@@ -140,6 +150,7 @@ class ServicePostgreSqlIntegrationTest extends PostgreSqlIntegrationTestSupport 
         List<LeaderboardEntryDto> historical = leaderboardService.getLeaderboardForSeason(season.id());
         assertEquals(expectedOrder, historical.stream().map(LeaderboardEntryDto::playerId).toList());
         assertEquals(List.of(1, 2, 3), historical.stream().map(LeaderboardEntryDto::rank).toList());
+        assertNull(participation(season.id(), 44L).getFinalRank());
     }
 
     @Test

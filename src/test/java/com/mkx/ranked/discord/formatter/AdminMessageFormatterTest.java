@@ -2,6 +2,7 @@ package com.mkx.ranked.discord.formatter;
 
 import com.mkx.ranked.model.dto.AdminMatchDto;
 import com.mkx.ranked.model.dto.AdminPlayerDto;
+import com.mkx.ranked.model.dto.AdminRegisteredPlayerDto;
 import com.mkx.ranked.model.dto.AdminSeasonStatisticsDto;
 import com.mkx.ranked.model.dto.LeaderboardEntryDto;
 import com.mkx.ranked.model.dto.SeasonDto;
@@ -108,6 +109,21 @@ class AdminMessageFormatterTest {
         assertTrue(seasons.contains("Изменить информацию о сезоне"));
         assertTrue(matches.contains("Удалить матч"));
         assertTrue(players.contains("Посмотреть статистику игрока"));
+        assertTrue(players.contains("Вывести всех зарегистрированных игроков"));
+    }
+
+    @Test
+    void registeredPlayerListContainsPlayersWithoutGames() {
+        List<String> messages = formatter.registeredPlayers(List.of(
+                new AdminRegisteredPlayerDto(1L, 11L, "discord-one", "Noob", 1000, 0),
+                new AdminRegisteredPlayerDto(2L, 22L, "discord-two", "Veteran", 1250, 8)
+        ));
+
+        String rendered = String.join("", messages);
+        assertTrue(rendered.contains("Всего: **2**"));
+        assertTrue(rendered.contains("**Noob**"));
+        assertTrue(rendered.contains("0 игр"));
+        assertTrue(rendered.contains("**Veteran**"));
     }
 
     private SeasonDto season(long id, int number, SeasonStatus status) {

@@ -6,6 +6,7 @@ import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
 import com.mkx.ranked.model.dto.AdminPlayerDto;
+import com.mkx.ranked.model.dto.AdminRegisteredPlayerDto;
 import com.mkx.ranked.model.dto.PlayerProfileDto;
 import com.mkx.ranked.model.enums.RankTier;
 import com.mkx.ranked.repository.PlayerRepository;
@@ -79,9 +80,30 @@ public class PlayerService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public List<AdminRegisteredPlayerDto> getAllRegisteredPlayersForActiveSeason() {
+        SeasonEntity season = seasonService.getActiveSeasonEntity();
+        return seasonPlayerRepository.findAllRegisteredBySeason(season)
+                .stream()
+                .map(this::toAdminRegisteredPlayerDto)
+                .toList();
+    }
+
     private PlayerEntity findPlayerByDiscordId(long discordId) {
         return playerRepository.findByDiscordId(discordId)
                 .orElseThrow(() -> new PlayerNotFoundException(discordId));
+    }
+
+    private AdminRegisteredPlayerDto toAdminRegisteredPlayerDto(SeasonPlayerEntity seasonPlayer) {
+        PlayerEntity player = seasonPlayer.getPlayer();
+        return new AdminRegisteredPlayerDto(
+                player.getId(),
+                player.getDiscordId(),
+                player.getUsername(),
+                seasonPlayer.getDisplayName(),
+                seasonPlayer.getRating(),
+                seasonPlayer.getGamesPlayed()
+        );
     }
 
     private SeasonPlayerEntity findSeasonPlayer(SeasonEntity season, PlayerEntity player) {

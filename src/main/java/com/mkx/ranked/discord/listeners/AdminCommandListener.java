@@ -188,8 +188,8 @@ public class AdminCommandListener extends ListenerAdapter {
 
     private List<ActionRow> playerManagementRows() {
         return List.of(ActionRow.of(
-                Button.secondary("admin:button:player_info", "Посмотреть статистику игрока"),
-                Button.secondary("admin:button:player_list", "Вывести всех зарегистрированных игроков")
+                Button.secondary("admin:button:player_list", "Вывести всех зарегистрированных игроков"),
+                Button.secondary("admin:button:player_info", "Посмотреть статистику игрока")
         ));
     }
 
