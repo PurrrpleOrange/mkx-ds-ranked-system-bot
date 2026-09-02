@@ -100,14 +100,14 @@ class AdminMessageFormatterTest {
     }
 
     @Test
-    void publishedLeaderboardAndSeasonStatisticsUseAlignedTables() {
+    void publishedLeaderboardUsesNumberedListAndSeasonStatisticsUsesAlignedTable() {
         LeaderboardEntryDto first = new LeaderboardEntryDto(
                 1, 1L, 11L, "subzero.discord", "Sub-Zero", 1400, 10, "S-Tier", "🥇"
         );
         LeaderboardEntryDto second = new LeaderboardEntryDto(
-                11, 2L, 22L, "scorpion.discord", "Scorpion", 1300, 8, "A-Tier", "🥈"
+                2, 2L, 22L, "scorpion.discord", "Scorpion", 1300, 8, "S-Tier", "🥇"
         );
-        List<MessageEmbed> leaderboard = formatter.fullLeaderboard(List.of(first, second));
+        List<String> leaderboard = formatter.fullLeaderboard(4, List.of(first, second));
         AdminSeasonStatisticsDto statistics = new AdminSeasonStatisticsDto(
                 season(80L, 8, SeasonStatus.FINISHED),
                 1,
@@ -116,22 +116,13 @@ class AdminMessageFormatterTest {
                 List.of(first)
         );
 
-        String published = leaderboard.stream()
-                .map(MessageEmbed::getDescription)
-                .reduce("", String::concat);
+        String published = String.join("", leaderboard);
         String statisticsDescription = formatter.previousSeasonStatistics(statistics).getDescription();
 
-        assertEquals(2, leaderboard.size());
-        assertTrue(leaderboard.get(0).getTitle().contains("🥇 S-Tier"));
-        assertTrue(leaderboard.get(1).getTitle().contains("🥈 A-Tier"));
-        assertEquals(new Color(255, 193, 7), leaderboard.get(0).getColor());
-        assertEquals(new Color(192, 192, 192), leaderboard.get(1).getColor());
-        assertTrue(published.contains("#  НИК"));
-        assertTrue(published.contains("Sub-Zero"));
-        assertTrue(published.contains("Scorpion"));
-        assertTrue(published.contains("@subzero.discord"));
-        assertTrue(published.contains("@scorpion.discord"));
-        assertTrue(published.contains("```text"));
+        assertEquals(1, leaderboard.size());
+        assertTrue(published.startsWith("**Актуальный рейтинг** 4 сезона"));
+        assertTrue(published.contains("1. *Sub-Zero* - 1400 (10 игр)"));
+        assertTrue(published.contains("2. *Scorpion* - 1300 (8 игр)"));
         assertTrue(statisticsDescription.contains("**Топ-10 сезона**"));
         assertTrue(statisticsDescription.contains("#  НИК"));
         assertTrue(statisticsDescription.contains("```text"));
