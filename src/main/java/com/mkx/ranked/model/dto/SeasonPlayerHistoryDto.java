@@ -6,7 +6,7 @@ public record SeasonPlayerHistoryDto(
         String displayName,
         int rating,
         int gamesPlayed,
-        int finalRank,
+        Integer finalRank,
         String tierName,
         String tierEmoji
 ) {

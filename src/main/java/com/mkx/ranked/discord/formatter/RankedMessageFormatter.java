@@ -24,13 +24,14 @@ public class RankedMessageFormatter {
 
     public MessageEmbed rankedMenu(PlayerProfileDto profile) {
         EmbedBuilder embed = new EmbedBuilder();
+        String rank = profile.rank() == null ? "Без ранга" : "#" + profile.rank();
         embed.setTitle("Mortal Kombat X - Ranked Season #" + profile.season().seasonNumber());
         embed.setColor(INFORMATION_COLOR);
         embed.setDescription("""
                 Привет, **%s**!
 
                 **Твой MMR:** `%d`
-                **Место в топе:** **#%d**
+                **Место в топе:** **%s**
                 **Сыграно игр:** %d
                 **Дивизион:** %s %s
 
@@ -39,7 +40,7 @@ public class RankedMessageFormatter {
                 """.formatted(
                 profile.displayName(),
                 profile.rating(),
-                profile.rank(),
+                rank,
                 profile.gamesPlayed(),
                 profile.tierEmoji(),
                 profile.tierName(),

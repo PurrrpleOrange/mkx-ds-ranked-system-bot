@@ -88,7 +88,8 @@ class ServicePostgreSqlIntegrationTest extends PostgreSqlIntegrationTestSupport 
         SeasonPlayerHistoryDto historical = seasonHistoryService
                 .findPlayerInFinishedSeason(firstSeason.id(), 11L)
                 .orElseThrow();
-        assertEquals(1, historical.finalRank());
+        assertNull(historical.finalRank());
+        assertEquals("Без ранга", historical.tierName());
         assertThrows(
                 SeasonNotActiveException.class,
                 () -> registrationService.register(22L, "discord-two", "Sub-Zero")
@@ -105,7 +106,7 @@ class ServicePostgreSqlIntegrationTest extends PostgreSqlIntegrationTestSupport 
                 .orElseThrow();
         assertEquals("Scorpion", unchanged.displayName());
         assertEquals(1000, unchanged.rating());
-        assertEquals(1, unchanged.finalRank());
+        assertNull(unchanged.finalRank());
     }
 
     @Test

@@ -129,7 +129,7 @@ public class AdminMessageFormatter {
         SeasonDto season = statistics.season();
         StringBuilder top = new StringBuilder();
         if (statistics.topPlayers().isEmpty()) {
-            top.append("В сезоне не было зарегистрированных игроков.");
+            top.append("В сезоне не было игроков со сыгранными матчами.");
         } else {
             for (LeaderboardEntryDto player : statistics.topPlayers()) {
                 top.append("**#")
@@ -188,6 +188,7 @@ public class AdminMessageFormatter {
     }
 
     public MessageEmbed playerInfo(AdminPlayerDto player) {
+        String rank = player.rank() == null ? "Без ранга" : "#" + player.rank();
         return new EmbedBuilder()
                 .setTitle("Игрок " + player.displayName())
                 .setColor(INFORMATION_COLOR)
@@ -197,7 +198,7 @@ public class AdminMessageFormatter {
                 .addField("Discord ID", String.valueOf(player.discordId()), true)
                 .addField("Рейтинг", String.valueOf(player.rating()), true)
                 .addField("Игр", String.valueOf(player.gamesPlayed()), true)
-                .addField("Место", "#" + player.rank(), true)
+                .addField("Место", rank, true)
                 .addField("Дивизион", player.tierEmoji() + " " + player.tierName(), true)
                 .build();
     }

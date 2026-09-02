@@ -7,7 +7,7 @@ public record AdminPlayerDto(
         String displayName,
         int rating,
         int gamesPlayed,
-        int rank,
+        Integer rank,
         String tierName,
         String tierEmoji,
         int seasonNumber

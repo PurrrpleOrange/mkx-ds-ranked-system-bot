@@ -19,6 +19,9 @@ import java.util.stream.IntStream;
 @Service
 public class PlayerService {
 
+    private static final String UNRANKED_TIER_NAME = "Без ранга";
+    private static final String UNRANKED_TIER_EMOJI = "⚪";
+
     private final PlayerRepository playerRepository;
     private final SeasonPlayerRepository seasonPlayerRepository;
     private final SeasonService seasonService;
@@ -38,8 +41,8 @@ public class PlayerService {
         PlayerEntity player = findPlayerByDiscordId(discordId);
         SeasonEntity season = seasonService.getActiveSeasonEntity();
         SeasonPlayerEntity seasonPlayer = findSeasonPlayer(season, player);
-        int rank = calculateRank(season, seasonPlayer);
-        RankTier tier = RankTier.getTierByRank(rank);
+        Integer rank = calculateRank(season, seasonPlayer);
+        RankTier tier = rank == null ? null : RankTier.getTierByRank(rank);
 
         return new PlayerProfileDto(
                 player.getId(),
@@ -48,8 +51,8 @@ public class PlayerService {
                 seasonPlayer.getRating(),
                 seasonPlayer.getGamesPlayed(),
                 rank,
-                tier.getName(),
-                tier.getEmoji(),
+                tier == null ? UNRANKED_TIER_NAME : tier.getName(),
+                tier == null ? UNRANKED_TIER_EMOJI : tier.getEmoji(),
                 seasonService.toDto(season)
         );
     }
@@ -59,8 +62,8 @@ public class PlayerService {
         PlayerEntity player = findPlayerByDiscordId(discordId);
         SeasonEntity season = seasonService.getActiveSeasonEntity();
         SeasonPlayerEntity seasonPlayer = findSeasonPlayer(season, player);
-        int rank = calculateRank(season, seasonPlayer);
-        RankTier tier = RankTier.getTierByRank(rank);
+        Integer rank = calculateRank(season, seasonPlayer);
+        RankTier tier = rank == null ? null : RankTier.getTierByRank(rank);
 
         return new AdminPlayerDto(
                 player.getId(),
@@ -70,8 +73,8 @@ public class PlayerService {
                 seasonPlayer.getRating(),
                 seasonPlayer.getGamesPlayed(),
                 rank,
-                tier.getName(),
-                tier.getEmoji(),
+                tier == null ? UNRANKED_TIER_NAME : tier.getName(),
+                tier == null ? UNRANKED_TIER_EMOJI : tier.getEmoji(),
                 season.getSeasonNumber()
         );
     }
@@ -86,7 +89,10 @@ public class PlayerService {
                 .orElseThrow(() -> new PlayerNotRegisteredException(player.getDiscordId()));
     }
 
-    private int calculateRank(SeasonEntity season, SeasonPlayerEntity seasonPlayer) {
+    private Integer calculateRank(SeasonEntity season, SeasonPlayerEntity seasonPlayer) {
+        if (seasonPlayer.getGamesPlayed() == 0) {
+            return null;
+        }
         List<SeasonPlayerEntity> standings = seasonPlayerRepository.findLeaderboardBySeason(season);
         return IntStream.range(0, standings.size())
                 .filter(i -> standings.get(i).getId().equals(seasonPlayer.getId()))

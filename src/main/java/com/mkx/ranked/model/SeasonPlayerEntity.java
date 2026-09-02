@@ -65,7 +65,8 @@ public class SeasonPlayerEntity {
     /**
      * Итоговое место игрока после завершения сезона.
      *
-     * <p>Пока сезон не завершён, имеет значение {@code null}.</p>
+     * <p>Пока сезон не завершён или игрок не сыграл ни одного матча,
+     * имеет значение {@code null}.</p>
      */
     @Column(name = "final_rank")
     private Integer finalRank;
