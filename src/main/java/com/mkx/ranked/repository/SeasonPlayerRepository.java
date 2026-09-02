@@ -75,6 +75,16 @@ public interface SeasonPlayerRepository
             from SeasonPlayerEntity sp
             join fetch sp.player
             where sp.season = :season
+            order by lower(sp.displayName) asc, sp.player.id asc
+            """)
+    List<SeasonPlayerEntity> findAllRegisteredBySeason(@Param("season") SeasonEntity season);
+
+    @Query("""
+            select sp
+            from SeasonPlayerEntity sp
+            join fetch sp.player
+            where sp.season = :season
+              and sp.gamesPlayed > 0
             order by sp.rating desc, sp.gamesPlayed desc, sp.player.id asc
             """)
     List<SeasonPlayerEntity> findLeaderboardBySeason(@Param("season") SeasonEntity season);
@@ -84,6 +94,7 @@ public interface SeasonPlayerRepository
             from SeasonPlayerEntity sp
             join fetch sp.player
             where sp.season = :season
+              and sp.finalRank is not null
             order by sp.finalRank asc
             """)
     List<SeasonPlayerEntity> findFinalLeaderboardBySeason(@Param("season") SeasonEntity season);
@@ -94,12 +105,14 @@ public interface SeasonPlayerRepository
                     from SeasonPlayerEntity sp
                     join fetch sp.player
                     where sp.season = :season
+                      and sp.gamesPlayed > 0
                     order by sp.rating desc, sp.gamesPlayed desc, sp.player.id asc
                     """,
             countQuery = """
                     select count(sp)
                     from SeasonPlayerEntity sp
                     where sp.season = :season
+                      and sp.gamesPlayed > 0
                     """
     )
     Page<SeasonPlayerEntity> findLeaderboardBySeason(

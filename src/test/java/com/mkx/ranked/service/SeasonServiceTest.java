@@ -1,6 +1,7 @@
 package com.mkx.ranked.service;
 
 import com.mkx.ranked.exception.BusinessException;
+import com.mkx.ranked.exception.SeasonNotFoundException;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
@@ -43,7 +44,7 @@ class SeasonServiceTest {
     void createsSeasonInCreatedStatusUsingDatabaseSequence() {
         LocalDateTime plannedEndDate = LocalDateTime.of(2026, 12, 1, 20, 0);
         when(seasonRepository.getNextSeasonNumber()).thenReturn(8L);
-        when(seasonRepository.save(any(SeasonEntity.class))).thenAnswer(invocation -> {
+        when(seasonRepository.saveAndFlush(any(SeasonEntity.class))).thenAnswer(invocation -> {
             SeasonEntity season = invocation.getArgument(0);
             ReflectionTestUtils.setField(season, "id", 80L);
             return season;
@@ -57,6 +58,31 @@ class SeasonServiceTest {
         assertNull(result.startDate());
         assertEquals(plannedEndDate, result.plannedEndDate());
         assertNull(result.endDate());
+    }
+
+    @Test
+    void createsSeasonWithAdministratorProvidedNumber() {
+        when(seasonRepository.saveAndFlush(any(SeasonEntity.class))).thenAnswer(invocation -> {
+            SeasonEntity season = invocation.getArgument(0);
+            ReflectionTestUtils.setField(season, "id", 1L);
+            return season;
+        });
+
+        SeasonDto result = service.createNewSeason(4, "Season Four", null);
+
+        assertEquals(4, result.seasonNumber());
+        assertEquals("Season Four", result.name());
+        verify(seasonRepository).existsBySeasonNumber(4);
+    }
+
+    @Test
+    void refusesInvalidOrDuplicateAdministratorProvidedNumber() {
+        when(seasonRepository.existsBySeasonNumber(4)).thenReturn(true);
+
+        assertThrows(BusinessException.class, () -> service.createNewSeason(0, "Season", null));
+        assertThrows(BusinessException.class, () -> service.createNewSeason(4, "Season", null));
+
+        verify(seasonRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -86,6 +112,16 @@ class SeasonServiceTest {
     @Test
     void refusesToActivateFinishedSeason() {
         SeasonEntity season = season(1L, 1, SeasonStatus.FINISHED);
+        when(seasonRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(season));
+
+        assertThrows(BusinessException.class, () -> service.activateSeason(1L));
+
+        verify(seasonRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void refusesToActivateAlreadyActiveSeason() {
+        SeasonEntity season = season(1L, 1, SeasonStatus.ACTIVE);
         when(seasonRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(season));
 
         assertThrows(BusinessException.class, () -> service.activateSeason(1L));
@@ -147,6 +183,14 @@ class SeasonServiceTest {
     }
 
     @Test
+    void adminLifecycleLookupRejectsUnknownSeason() {
+        when(seasonRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
+
+        assertThrows(SeasonNotFoundException.class, () -> service.activateSeason(999L));
+        assertThrows(SeasonNotFoundException.class, () -> service.finishSeason(999L));
+    }
+
+    @Test
     void updatesPlannedEndDateOnlyOnLockedActiveSeason() {
         SeasonEntity active = season(90L, 9, SeasonStatus.ACTIVE);
         LocalDateTime plannedEnd = LocalDateTime.of(2026, 12, 15, 20, 0);
@@ -158,6 +202,47 @@ class SeasonServiceTest {
         assertEquals(plannedEnd, result.plannedEndDate());
         verify(seasonRepository).findByStatusForUpdate(SeasonStatus.ACTIVE);
         verify(seasonRepository).save(active);
+    }
+
+    @Test
+    void updatesActiveSeasonNumberNameAndPlannedEndDateUnderOneLock() {
+        SeasonEntity active = season(90L, 9, SeasonStatus.ACTIVE);
+        LocalDateTime plannedEnd = LocalDateTime.of(2026, 12, 15, 20, 0);
+        when(seasonRepository.findByStatusForUpdate(SeasonStatus.ACTIVE)).thenReturn(Optional.of(active));
+        when(seasonRepository.saveAndFlush(active)).thenReturn(active);
+
+        SeasonDto result = service.updateActiveSeasonInfo(4, "  Winter Clash  ", plannedEnd);
+
+        assertEquals(4, result.seasonNumber());
+        assertEquals("Winter Clash", result.name());
+        assertEquals(plannedEnd, result.plannedEndDate());
+        verify(seasonRepository).findByStatusForUpdate(SeasonStatus.ACTIVE);
+        verify(seasonRepository).existsBySeasonNumberAndIdNot(4, 90L);
+        verify(seasonRepository).saveAndFlush(active);
+    }
+
+    @Test
+    void activeSeasonInformationRejectsInvalidNumberOrNameBeforeLocking() {
+        assertThrows(BusinessException.class, () -> service.updateActiveSeasonInfo(0, "Season", null));
+        assertThrows(BusinessException.class, () -> service.updateActiveSeasonInfo(4, "   ", null));
+        assertThrows(BusinessException.class, () -> service.updateActiveSeasonInfo(4, "x".repeat(101), null));
+
+        verify(seasonRepository, never()).findByStatusForUpdate(any());
+    }
+
+    @Test
+    void activeSeasonNumberMustBeUnique() {
+        SeasonEntity active = season(90L, 9, SeasonStatus.ACTIVE);
+        when(seasonRepository.findByStatusForUpdate(SeasonStatus.ACTIVE)).thenReturn(Optional.of(active));
+        when(seasonRepository.existsBySeasonNumberAndIdNot(4, 90L)).thenReturn(true);
+
+        assertThrows(
+                BusinessException.class,
+                () -> service.updateActiveSeasonInfo(4, "Season Four", null)
+        );
+
+        assertEquals(9, active.getSeasonNumber());
+        verify(seasonRepository, never()).saveAndFlush(any());
     }
 
     private SeasonEntity season(long id, int number, SeasonStatus status) {

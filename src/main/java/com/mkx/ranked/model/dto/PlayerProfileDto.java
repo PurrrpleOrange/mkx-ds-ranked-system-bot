@@ -6,7 +6,7 @@ public record PlayerProfileDto(
         String displayName,
         int rating,
         int gamesPlayed,
-        int rank,
+        Integer rank,
         String tierName,
         String tierEmoji,
         SeasonDto season

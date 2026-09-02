@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -71,6 +72,7 @@ class RegistrationServiceTest {
         assertEquals("Sub-Zero", participation.getDisplayName());
         assertEquals(1000, participation.getRating());
         assertEquals(0, participation.getGamesPlayed());
+        assertNull(participation.getFinalRank());
         assertEquals("Sub-Zero", result.displayName());
     }
 
@@ -135,6 +137,23 @@ class RegistrationServiceTest {
     }
 
     @Test
+    void sameDisplayNameInDifferentSeasonIsAllowed() {
+        PlayerEntity existingPlayer = player(1L, 100L, "discord-user");
+        when(playerRepository.findByDiscordId(100L)).thenReturn(Optional.of(existingPlayer));
+        when(playerRepository.save(existingPlayer)).thenReturn(existingPlayer);
+        when(seasonPlayerRepository.existsBySeasonAndPlayer(activeSeason, existingPlayer)).thenReturn(false);
+        when(seasonPlayerRepository.existsBySeasonAndDisplayNameIgnoreCase(activeSeason, "Scorpion"))
+                .thenReturn(false);
+        when(seasonPlayerRepository.saveAndFlush(any(SeasonPlayerEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        RegistrationResultDto result = service.register(100L, "discord-user", "Scorpion");
+
+        assertEquals("Scorpion", result.displayName());
+        verify(seasonPlayerRepository).saveAndFlush(any(SeasonPlayerEntity.class));
+    }
+
+    @Test
     void existingPlayerIsNotAutomaticallyRegisteredInNewSeason() {
         PlayerEntity existingPlayer = player(1L, 100L, "discord-user");
         when(playerRepository.findByDiscordId(100L)).thenReturn(Optional.of(existingPlayer));
@@ -165,10 +184,28 @@ class RegistrationServiceTest {
     }
 
     @Test
+    void concurrentDiscordIdentityConflictBecomesAlreadyRegisteredBusinessException() {
+        PlayerEntity savedPlayer = player(2L, 200L, "discord-user");
+        when(playerRepository.findByDiscordId(200L)).thenReturn(Optional.empty());
+        when(playerRepository.save(any(PlayerEntity.class))).thenReturn(savedPlayer);
+        when(seasonPlayerRepository.saveAndFlush(any(SeasonPlayerEntity.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "duplicate key violates constraint players_discord_id_key"
+                ));
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> service.register(200L, "discord-user", "Scorpion")
+        );
+
+        assertEquals("You are already registered in the current season.", exception.getMessage());
+    }
+
+    @Test
     void unrelatedDataIntegrityViolationIsNotHidden() {
         PlayerEntity savedPlayer = player(2L, 200L, "discord-user");
         DataIntegrityViolationException databaseFailure =
-                new DataIntegrityViolationException("players_discord_id_key");
+                new DataIntegrityViolationException("some_other_constraint");
         when(playerRepository.findByDiscordId(200L)).thenReturn(Optional.empty());
         when(playerRepository.save(any(PlayerEntity.class))).thenReturn(savedPlayer);
         when(seasonPlayerRepository.saveAndFlush(any(SeasonPlayerEntity.class)))
@@ -180,6 +217,68 @@ class RegistrationServiceTest {
         );
 
         assertEquals(databaseFailure, thrown);
+    }
+
+    @Test
+    void updatesOnlyCurrentSeasonDisplayNameAndPreservesProgress() {
+        PlayerEntity existingPlayer = player(1L, 100L, "discord-user");
+        SeasonPlayerEntity participation = new SeasonPlayerEntity(
+                existingPlayer,
+                activeSeason,
+                "Old Name"
+        );
+        participation.setRating(1275);
+        participation.setGamesPlayed(12);
+        when(playerRepository.findByDiscordId(100L)).thenReturn(Optional.of(existingPlayer));
+        when(seasonPlayerRepository.findBySeasonAndPlayer(activeSeason, existingPlayer))
+                .thenReturn(Optional.of(participation));
+        when(seasonPlayerRepository.saveAndFlush(participation)).thenReturn(participation);
+
+        RegistrationResultDto result = service.updateCurrentSeasonDisplayName(100L, "  New Name  ");
+
+        assertEquals("New Name", result.displayName());
+        assertEquals(1275, result.rating());
+        assertEquals(12, result.gamesPlayed());
+        assertEquals(1275, participation.getRating());
+        assertEquals(12, participation.getGamesPlayed());
+        verify(seasonPlayerRepository).saveAndFlush(participation);
+    }
+
+    @Test
+    void profileDisplayNameMustBeUniqueWithinActiveSeason() {
+        PlayerEntity existingPlayer = player(1L, 100L, "discord-user");
+        SeasonPlayerEntity participation = new SeasonPlayerEntity(
+                existingPlayer,
+                activeSeason,
+                "Old Name"
+        );
+        when(playerRepository.findByDiscordId(100L)).thenReturn(Optional.of(existingPlayer));
+        when(seasonPlayerRepository.findBySeasonAndPlayer(activeSeason, existingPlayer))
+                .thenReturn(Optional.of(participation));
+        when(seasonPlayerRepository.existsBySeasonAndDisplayNameIgnoreCase(activeSeason, "Taken Name"))
+                .thenReturn(true);
+
+        assertThrows(
+                BusinessException.class,
+                () -> service.updateCurrentSeasonDisplayName(100L, "Taken Name")
+        );
+
+        assertEquals("Old Name", participation.getDisplayName());
+        verify(seasonPlayerRepository, never()).saveAndFlush(participation);
+    }
+
+    @Test
+    void profileDisplayNameLengthIsValidatedBeforeDatabaseAccess() {
+        assertThrows(
+                BusinessException.class,
+                () -> service.updateCurrentSeasonDisplayName(100L, "x")
+        );
+        assertThrows(
+                BusinessException.class,
+                () -> service.updateCurrentSeasonDisplayName(100L, "x".repeat(33))
+        );
+
+        verify(playerRepository, never()).findByDiscordId(any(Long.class));
     }
 
     private PlayerEntity player(long id, long discordId, String discordUsername) {

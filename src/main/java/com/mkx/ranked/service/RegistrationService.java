@@ -75,37 +75,76 @@ public class RegistrationService {
         PlayerEntity player = existingPlayer
                 .orElseGet(() -> new PlayerEntity(discordId, currentDiscordUsername));
         player.setUsername(currentDiscordUsername);
-        PlayerEntity savedPlayer = playerRepository.save(player);
+        PlayerEntity savedPlayer;
         SeasonPlayerEntity seasonPlayer;
         try {
+            savedPlayer = playerRepository.save(player);
             seasonPlayer = seasonPlayerRepository.saveAndFlush(
                     new SeasonPlayerEntity(savedPlayer, season, displayName)
             );
         } catch (DataIntegrityViolationException exception) {
-            if (isDisplayNameUniqueConstraint(exception)) {
+            if (hasConstraint(exception, "uq_season_player_display_name_ci")) {
                 throw new BusinessException(
                         "Username '" + displayName + "' is already registered in the current season."
                 );
+            }
+            if (hasConstraint(exception, "players_discord_id_key", "uq_season_player")) {
+                throw new BusinessException("You are already registered in the current season.");
             }
             throw exception;
         }
         return toResult(savedPlayer, seasonPlayer, season);
     }
 
-    private boolean isDisplayNameUniqueConstraint(Throwable throwable) {
+    @Transactional
+    public RegistrationResultDto updateCurrentSeasonDisplayName(
+            long discordId,
+            String requestedUsername
+    ) {
+        validateDiscordId(discordId);
+        String displayName = normalizeGameUsername(requestedUsername);
+        SeasonEntity season = seasonService.getActiveSeasonEntityForReadLock();
+        PlayerEntity player = playerRepository.findByDiscordId(discordId)
+                .orElseThrow(() -> new PlayerNotFoundException(discordId));
+        SeasonPlayerEntity seasonPlayer = seasonPlayerRepository.findBySeasonAndPlayer(season, player)
+                .orElseThrow(() -> new PlayerNotRegisteredException(discordId));
+
+        if (!seasonPlayer.getDisplayName().equalsIgnoreCase(displayName)
+                && seasonPlayerRepository.existsBySeasonAndDisplayNameIgnoreCase(season, displayName)) {
+            throw duplicateDisplayName(displayName);
+        }
+
+        seasonPlayer.setDisplayName(displayName);
+        try {
+            seasonPlayerRepository.saveAndFlush(seasonPlayer);
+        } catch (DataIntegrityViolationException exception) {
+            if (hasConstraint(exception, "uq_season_player_display_name_ci")) {
+                throw duplicateDisplayName(displayName);
+            }
+            throw exception;
+        }
+        return toResult(player, seasonPlayer, season);
+    }
+
+    private boolean hasConstraint(Throwable throwable, String... constraintNames) {
         Throwable current = throwable;
         while (current != null) {
-            if (current instanceof ConstraintViolationException constraintViolation
-                    && "uq_season_player_display_name_ci".equalsIgnoreCase(
-                            constraintViolation.getConstraintName()
-                    )) {
-                return true;
+            if (current instanceof ConstraintViolationException constraintViolation) {
+                for (String constraintName : constraintNames) {
+                    if (constraintName.equalsIgnoreCase(constraintViolation.getConstraintName())) {
+                        return true;
+                    }
+                }
             }
 
             String message = current.getMessage();
-            if (message != null
-                    && message.toLowerCase(Locale.ROOT).contains("uq_season_player_display_name_ci")) {
-                return true;
+            if (message != null) {
+                String normalizedMessage = message.toLowerCase(Locale.ROOT);
+                for (String constraintName : constraintNames) {
+                    if (normalizedMessage.contains(constraintName.toLowerCase(Locale.ROOT))) {
+                        return true;
+                    }
+                }
             }
             current = current.getCause();
         }
@@ -133,7 +172,17 @@ public class RegistrationService {
         if (username == null || username.isBlank()) {
             throw new BusinessException("Username must not be blank.");
         }
-        return username.trim();
+        String normalizedUsername = username.trim();
+        if (normalizedUsername.length() < 2 || normalizedUsername.length() > 32) {
+            throw new BusinessException("Username must contain between 2 and 32 characters.");
+        }
+        return normalizedUsername;
+    }
+
+    private BusinessException duplicateDisplayName(String displayName) {
+        return new BusinessException(
+                "Username '" + displayName + "' is already registered in the current season."
+        );
     }
 
     private String normalizeDiscordUsername(String discordUsername, String fallback) {

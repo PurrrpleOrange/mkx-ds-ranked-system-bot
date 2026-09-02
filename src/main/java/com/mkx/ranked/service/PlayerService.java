@@ -6,6 +6,7 @@ import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
 import com.mkx.ranked.model.dto.AdminPlayerDto;
+import com.mkx.ranked.model.dto.AdminRegisteredPlayerDto;
 import com.mkx.ranked.model.dto.PlayerProfileDto;
 import com.mkx.ranked.model.enums.RankTier;
 import com.mkx.ranked.repository.PlayerRepository;
@@ -18,6 +19,9 @@ import java.util.stream.IntStream;
 
 @Service
 public class PlayerService {
+
+    private static final String UNRANKED_TIER_NAME = "Без ранга";
+    private static final String UNRANKED_TIER_EMOJI = "⚪";
 
     private final PlayerRepository playerRepository;
     private final SeasonPlayerRepository seasonPlayerRepository;
@@ -38,8 +42,8 @@ public class PlayerService {
         PlayerEntity player = findPlayerByDiscordId(discordId);
         SeasonEntity season = seasonService.getActiveSeasonEntity();
         SeasonPlayerEntity seasonPlayer = findSeasonPlayer(season, player);
-        int rank = calculateRank(season, seasonPlayer);
-        RankTier tier = RankTier.getTierByRank(rank);
+        Integer rank = calculateRank(season, seasonPlayer);
+        RankTier tier = rank == null ? null : RankTier.getTierByRank(rank);
 
         return new PlayerProfileDto(
                 player.getId(),
@@ -48,8 +52,8 @@ public class PlayerService {
                 seasonPlayer.getRating(),
                 seasonPlayer.getGamesPlayed(),
                 rank,
-                tier.getName(),
-                tier.getEmoji(),
+                tier == null ? UNRANKED_TIER_NAME : tier.getName(),
+                tier == null ? UNRANKED_TIER_EMOJI : tier.getEmoji(),
                 seasonService.toDto(season)
         );
     }
@@ -59,8 +63,8 @@ public class PlayerService {
         PlayerEntity player = findPlayerByDiscordId(discordId);
         SeasonEntity season = seasonService.getActiveSeasonEntity();
         SeasonPlayerEntity seasonPlayer = findSeasonPlayer(season, player);
-        int rank = calculateRank(season, seasonPlayer);
-        RankTier tier = RankTier.getTierByRank(rank);
+        Integer rank = calculateRank(season, seasonPlayer);
+        RankTier tier = rank == null ? null : RankTier.getTierByRank(rank);
 
         return new AdminPlayerDto(
                 player.getId(),
@@ -70,10 +74,19 @@ public class PlayerService {
                 seasonPlayer.getRating(),
                 seasonPlayer.getGamesPlayed(),
                 rank,
-                tier.getName(),
-                tier.getEmoji(),
+                tier == null ? UNRANKED_TIER_NAME : tier.getName(),
+                tier == null ? UNRANKED_TIER_EMOJI : tier.getEmoji(),
                 season.getSeasonNumber()
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminRegisteredPlayerDto> getAllRegisteredPlayersForActiveSeason() {
+        SeasonEntity season = seasonService.getActiveSeasonEntity();
+        return seasonPlayerRepository.findAllRegisteredBySeason(season)
+                .stream()
+                .map(this::toAdminRegisteredPlayerDto)
+                .toList();
     }
 
     private PlayerEntity findPlayerByDiscordId(long discordId) {
@@ -81,12 +94,27 @@ public class PlayerService {
                 .orElseThrow(() -> new PlayerNotFoundException(discordId));
     }
 
+    private AdminRegisteredPlayerDto toAdminRegisteredPlayerDto(SeasonPlayerEntity seasonPlayer) {
+        PlayerEntity player = seasonPlayer.getPlayer();
+        return new AdminRegisteredPlayerDto(
+                seasonPlayer.getId(),
+                player.getDiscordId(),
+                player.getUsername(),
+                seasonPlayer.getDisplayName(),
+                seasonPlayer.getRating(),
+                seasonPlayer.getGamesPlayed()
+        );
+    }
+
     private SeasonPlayerEntity findSeasonPlayer(SeasonEntity season, PlayerEntity player) {
         return seasonPlayerRepository.findBySeasonAndPlayer(season, player)
                 .orElseThrow(() -> new PlayerNotRegisteredException(player.getDiscordId()));
     }
 
-    private int calculateRank(SeasonEntity season, SeasonPlayerEntity seasonPlayer) {
+    private Integer calculateRank(SeasonEntity season, SeasonPlayerEntity seasonPlayer) {
+        if (seasonPlayer.getGamesPlayed() == 0) {
+            return null;
+        }
         List<SeasonPlayerEntity> standings = seasonPlayerRepository.findLeaderboardBySeason(season);
         return IntStream.range(0, standings.size())
                 .filter(i -> standings.get(i).getId().equals(seasonPlayer.getId()))

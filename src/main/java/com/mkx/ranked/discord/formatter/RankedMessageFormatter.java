@@ -13,38 +13,48 @@ import org.springframework.stereotype.Component;
 import java.awt.Color;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class RankedMessageFormatter {
 
     private static final Color INFORMATION_COLOR = new Color(0, 255, 200);
     private static final int DISCORD_MESSAGE_CHUNK_SIZE = 1900;
+    private static final DateTimeFormatter TABLE_DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+    private static final String ANSI_RESET = "\u001B[0m";
+    private static final String ANSI_WIN = "\u001B[1;37;42mWIN " + ANSI_RESET;
+    private static final String ANSI_LOSE = "\u001B[1;37;41mLOSE" + ANSI_RESET;
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
     public MessageEmbed rankedMenu(PlayerProfileDto profile) {
         EmbedBuilder embed = new EmbedBuilder();
-        embed.setTitle("Mortal Kombat X - Ranked Season #" + profile.season().seasonNumber());
+        String rank = profile.rank() == null ? "Без ранга" : "#" + profile.rank();
+        embed.setTitle("Mortal Kombat X - " + profile.season().name());
         embed.setColor(INFORMATION_COLOR);
         embed.setDescription("""
+               
                 Привет, **%s**!
+                
+                %s **%s**
+                Твой MMR: `%d`
+                Место в топе: %s
+                Сыграно игр: %d
 
-                **Твой MMR:** `%d`
-                **Место в топе:** **#%d**
-                **Сыграно игр:** %d
-                **Дивизион:** %s %s
-
-                **Сезон:** %s
-                **Окончание:** %s
+                *Дата начала сезона: %s*
+                *Дата окончания сезона: %s*
                 """.formatted(
                 profile.displayName(),
-                profile.rating(),
-                profile.rank(),
-                profile.gamesPlayed(),
                 profile.tierEmoji(),
                 profile.tierName(),
-                profile.season().name(),
-                formatDiscordTimestamp(profile.season().plannedEndDate())
+                profile.rating(),
+                rank,
+                profile.gamesPlayed(),
+                formatDate(profile.season().startDate()),
+                formatDate(profile.season().plannedEndDate())
         ));
         return embed.build();
     }
@@ -133,66 +143,79 @@ public class RankedMessageFormatter {
     }
 
     public List<String> matchHistory(List<MatchHistoryEntryDto> matches) {
-        StringBuilder message = new StringBuilder("**ИСТОРИЯ МАТЧЕЙ ТЕКУЩЕГО СЕЗОНА**\n\n");
-        for (MatchHistoryEntryDto match : matches) {
-            String delta = match.ratingDelta() > 0
-                    ? "+" + match.ratingDelta()
-                    : String.valueOf(match.ratingDelta());
-
-            message.append("`Матч #")
-                    .append(match.matchId())
-                    .append("` | ")
-                    .append(match.win() ? "WIN" : "LOSE")
-                    .append(" **VS ")
-                    .append(match.opponentDisplayName())
-                    .append("** (")
-                    .append(match.scoreFor())
-                    .append(":")
-                    .append(match.scoreAgainst())
-                    .append(") | `")
-                    .append(delta)
-                    .append(" MMR` | ")
-                    .append(formatDiscordTimestamp(match.createdAt()))
-                    .append("\n");
-        }
-        return splitMessage(message.toString());
+        List<DiscordTableFormatter.Column> columns = List.of(
+                DiscordTableFormatter.Column.right("ID"),
+                DiscordTableFormatter.Column.left("ИТОГ"),
+                DiscordTableFormatter.Column.left("СОПЕРНИК"),
+                DiscordTableFormatter.Column.right("СЧЁТ"),
+                DiscordTableFormatter.Column.right("MMR"),
+                DiscordTableFormatter.Column.left("ДАТА")
+        );
+        List<List<String>> rows = matches.stream()
+                .map(match -> List.of(
+                        String.valueOf(match.matchId()),
+                        match.win() ? ANSI_WIN : ANSI_LOSE,
+                        match.opponentDisplayName(),
+                        match.scoreFor() + ":" + match.scoreAgainst(),
+                        "%+d".formatted(match.ratingDelta()),
+                        formatTableDateTime(match.createdAt())
+                ))
+                .toList();
+        return DiscordTableFormatter.renderAnsi(
+                "ИСТОРИЯ МАТЧЕЙ ТЕКУЩЕГО СЕЗОНА",
+                null,
+                columns,
+                rows,
+                DISCORD_MESSAGE_CHUNK_SIZE
+        );
     }
 
     public List<String> leaderboard(List<LeaderboardEntryDto> players) {
-        StringBuilder message = new StringBuilder("**ТАБЛИЦА ЛИДЕРОВ ТЕКУЩЕГО СЕЗОНА**\n\n");
+        List<DiscordTableFormatter.Column> columns = List.of(
+                DiscordTableFormatter.Column.right("#"),
+                DiscordTableFormatter.Column.left("НИК"),
+                DiscordTableFormatter.Column.left("DISCORD"),
+                DiscordTableFormatter.Column.right("MMR"),
+                DiscordTableFormatter.Column.right("ИГРЫ")
+        );
+
+        Map<Division, List<List<String>>> rowsByDivision = new LinkedHashMap<>();
         for (LeaderboardEntryDto player : players) {
-            message.append(player.tierEmoji())
-                    .append(" **#")
-                    .append(player.rank())
-                    .append("** ")
-                    .append(player.displayName())
-                    .append(" - `")
-                    .append(player.rating())
-                    .append(" MMR` ")
-                    .append("(игры: ")
-                    .append(player.gamesPlayed())
-                    .append(")\n");
+            Division division = new Division(player.tierName(), player.tierEmoji());
+            rowsByDivision.computeIfAbsent(division, ignored -> new ArrayList<>())
+                    .add(List.of(
+                        String.valueOf(player.rank()),
+                        player.displayName(),
+                        "@" + player.discordUsername(),
+                        String.valueOf(player.rating()),
+                        String.valueOf(player.gamesPlayed())
+                    ));
         }
-        return splitMessage(message.toString());
+        List<DiscordTableFormatter.Group> groups = rowsByDivision.entrySet().stream()
+                .map(entry -> new DiscordTableFormatter.Group(
+                        entry.getKey().label(),
+                        entry.getValue()
+                ))
+                .toList();
+
+        return DiscordTableFormatter.renderGrouped(
+                "ТАБЛИЦА ЛИДЕРОВ ТЕКУЩЕГО СЕЗОНА",
+                null,
+                columns,
+                groups,
+                DISCORD_MESSAGE_CHUNK_SIZE
+        );
     }
 
-    private List<String> splitMessage(String message) {
-        List<String> chunks = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
+    private record Division(String name, String emoji) {
 
-        for (String line : message.split("\n")) {
-            if (!current.isEmpty()
-                    && current.length() + line.length() + 1 > DISCORD_MESSAGE_CHUNK_SIZE) {
-                chunks.add(current.toString());
-                current.setLength(0);
-            }
-            current.append(line).append('\n');
+        private String label() {
+            return (emoji == null || emoji.isBlank() ? "" : emoji + " ") + name;
         }
+    }
 
-        if (!current.isEmpty()) {
-            chunks.add(current.toString());
-        }
-        return chunks;
+    private String formatTableDateTime(LocalDateTime dateTime) {
+        return dateTime == null ? "—" : dateTime.format(TABLE_DATE_TIME_FORMAT);
     }
 
     private String formatDiscordTimestamp(LocalDateTime dateTime) {
@@ -202,5 +225,11 @@ public class RankedMessageFormatter {
 
         long epochSecond = dateTime.atZone(ZoneId.systemDefault()).toEpochSecond();
         return "<t:" + epochSecond + ":F> (<t:" + epochSecond + ":R>)";
+    }
+
+    private String formatDate(LocalDateTime dateTime) {
+        return dateTime == null
+                ? "не указано"
+                : dateTime.format(DATE_FORMAT);
     }
 }

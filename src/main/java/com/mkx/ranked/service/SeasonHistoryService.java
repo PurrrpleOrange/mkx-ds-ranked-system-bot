@@ -23,6 +23,9 @@ import java.util.Optional;
 @Service
 public class SeasonHistoryService {
 
+    private static final String UNRANKED_TIER_NAME = "Без ранга";
+    private static final String UNRANKED_TIER_EMOJI = "⚪";
+
     private final SeasonRepository seasonRepository;
     private final SeasonPlayerRepository seasonPlayerRepository;
     private final SeasonService seasonService;
@@ -123,10 +126,7 @@ public class SeasonHistoryService {
 
     private SeasonPlayerHistoryDto toHistoryDto(SeasonPlayerEntity seasonPlayer) {
         Integer finalRank = seasonPlayer.getFinalRank();
-        if (finalRank == null) {
-            throw new BusinessException("Finished season contains a player without final rank.");
-        }
-        RankTier tier = RankTier.getTierByRank(finalRank);
+        RankTier tier = finalRank == null ? null : RankTier.getTierByRank(finalRank);
         PlayerEntity player = seasonPlayer.getPlayer();
         return new SeasonPlayerHistoryDto(
                 player.getId(),
@@ -135,8 +135,8 @@ public class SeasonHistoryService {
                 seasonPlayer.getRating(),
                 seasonPlayer.getGamesPlayed(),
                 finalRank,
-                tier.getName(),
-                tier.getEmoji()
+                tier == null ? UNRANKED_TIER_NAME : tier.getName(),
+                tier == null ? UNRANKED_TIER_EMOJI : tier.getEmoji()
         );
     }
 }

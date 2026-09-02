@@ -81,8 +81,8 @@ public class EloCalculator {
         double rawDeltaLoser = kLoser * (scoreLoser - expectedLoser) * (1.0 + Math.abs(scoreLoser - expectedLoser));
 
         // 5. Округление (победитель получает +, проигравший теряет -)
-        int deltaWinner = (int) Math.round(rawDeltaWinner);
-        int deltaLoser = (int) Math.round(rawDeltaLoser);
+        int deltaWinner = Math.max(1, (int) Math.round(rawDeltaWinner));
+        int deltaLoser = Math.min(-1, (int) Math.round(rawDeltaLoser));
 
         return new RatingChange(deltaWinner, deltaLoser);
     }

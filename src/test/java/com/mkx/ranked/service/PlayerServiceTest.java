@@ -1,9 +1,11 @@
 package com.mkx.ranked.service;
 
+import com.mkx.ranked.exception.PlayerNotFoundException;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
 import com.mkx.ranked.model.dto.AdminPlayerDto;
+import com.mkx.ranked.model.dto.AdminRegisteredPlayerDto;
 import com.mkx.ranked.repository.PlayerRepository;
 import com.mkx.ranked.repository.SeasonPlayerRepository;
 import org.junit.jupiter.api.Test;
@@ -13,10 +15,24 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class PlayerServiceTest {
+
+    @Test
+    void adminPlayerLookupRejectsUnknownDiscordUser() {
+        PlayerRepository playerRepository = mock(PlayerRepository.class);
+        PlayerService service = new PlayerService(
+                playerRepository,
+                mock(SeasonPlayerRepository.class),
+                mock(SeasonService.class)
+        );
+        when(playerRepository.findByDiscordId(999L)).thenReturn(Optional.empty());
+
+        assertThrows(PlayerNotFoundException.class, () -> service.getAdminPlayerInfo(999L));
+    }
 
     @Test
     void adminPlayerInfoUsesActiveSeasonProfileAndLeaderboardRank() {
@@ -48,6 +64,35 @@ class PlayerServiceTest {
         assertEquals(12, result.gamesPlayed());
         assertEquals(2, result.rank());
         assertEquals(9, result.seasonNumber());
+    }
+
+    @Test
+    void registeredPlayerListIncludesParticipantsWithoutGamesInRepositoryOrder() {
+        PlayerRepository playerRepository = mock(PlayerRepository.class);
+        SeasonPlayerRepository seasonPlayerRepository = mock(SeasonPlayerRepository.class);
+        SeasonService seasonService = mock(SeasonService.class);
+        PlayerService service = new PlayerService(playerRepository, seasonPlayerRepository, seasonService);
+        SeasonEntity season = new SeasonEntity(9, "Season 9", null);
+        PlayerEntity firstPlayer = new PlayerEntity(11L, "first-discord");
+        PlayerEntity secondPlayer = new PlayerEntity(22L, "second-discord");
+        SeasonPlayerEntity first = seasonPlayer(1L, firstPlayer, season, "First", 1000);
+        SeasonPlayerEntity second = seasonPlayer(2L, secondPlayer, season, "Second", 1200);
+        second.setGamesPlayed(5);
+
+        when(seasonService.getActiveSeasonEntity()).thenReturn(season);
+        when(seasonPlayerRepository.findAllRegisteredBySeason(season)).thenReturn(List.of(first, second));
+
+        List<AdminRegisteredPlayerDto> result = service.getAllRegisteredPlayersForActiveSeason();
+
+        assertEquals(List.of("First", "Second"), result.stream()
+                .map(AdminRegisteredPlayerDto::displayName)
+                .toList());
+        assertEquals(List.of(0, 5), result.stream()
+                .map(AdminRegisteredPlayerDto::gamesPlayed)
+                .toList());
+        assertEquals(List.of(1L, 2L), result.stream()
+                .map(AdminRegisteredPlayerDto::seasonPlayerId)
+                .toList());
     }
 
     private SeasonPlayerEntity seasonPlayer(

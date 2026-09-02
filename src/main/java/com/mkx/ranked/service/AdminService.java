@@ -2,6 +2,7 @@ package com.mkx.ranked.service;
 
 import com.mkx.ranked.model.dto.AdminMatchDto;
 import com.mkx.ranked.model.dto.AdminPlayerDto;
+import com.mkx.ranked.model.dto.AdminRegisteredPlayerDto;
 import com.mkx.ranked.model.dto.AdminSeasonStatisticsDto;
 import com.mkx.ranked.model.dto.LeaderboardEntryDto;
 import com.mkx.ranked.model.dto.SeasonDto;
@@ -33,8 +34,8 @@ public class AdminService {
         this.seasonHistoryService = seasonHistoryService;
     }
 
-    public SeasonDto createSeason(String name, LocalDateTime plannedEndDate) {
-        return seasonService.createNewSeason(name, plannedEndDate);
+    public SeasonDto createSeason(int seasonNumber, String name, LocalDateTime plannedEndDate) {
+        return seasonService.createNewSeason(seasonNumber, name, plannedEndDate);
     }
 
     public SeasonDto activateSeason(int seasonNumber) {
@@ -63,6 +64,14 @@ public class AdminService {
         return seasonService.updatePlannedEndDate(plannedEndDate);
     }
 
+    public SeasonDto updateActiveSeasonInfo(
+            int seasonNumber,
+            String name,
+            LocalDateTime plannedEndDate
+    ) {
+        return seasonService.updateActiveSeasonInfo(seasonNumber, name, plannedEndDate);
+    }
+
     public AdminSeasonStatisticsDto getPreviousSeasonStatisticsById(long seasonId) {
         return seasonHistoryService.getFinishedSeasonStatistics(seasonId);
     }
@@ -81,6 +90,10 @@ public class AdminService {
 
     public AdminPlayerDto getPlayerInfo(long discordId) {
         return playerService.getAdminPlayerInfo(discordId);
+    }
+
+    public List<AdminRegisteredPlayerDto> getAllRegisteredPlayers() {
+        return playerService.getAllRegisteredPlayersForActiveSeason();
     }
 
     public List<LeaderboardEntryDto> getActiveSeasonLeaderboard() {
