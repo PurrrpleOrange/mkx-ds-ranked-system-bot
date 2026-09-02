@@ -53,7 +53,7 @@ class RankedMessageFormatterTest {
                 4,
                 "Moscow Kombat",
                 SeasonStatus.ACTIVE,
-                null,
+                LocalDateTime.of(2026, 9, 1, 11, 25),
                 LocalDateTime.of(2026, 12, 1, 20, 0),
                 null
         );
@@ -64,14 +64,14 @@ class RankedMessageFormatterTest {
         var embed = formatter.rankedMenu(profile);
         String description = embed.getDescription();
 
-        assertEquals("Season #4", embed.getTitle());
-        assertTrue(description.startsWith("**Moscow Kombat**"));
+        assertEquals("Mortal Kombat X - Moscow Kombat", embed.getTitle());
         assertTrue(description.contains("Привет, **Sub-Zero**!"));
         assertTrue(description.contains("🥇 **S-Tier**"));
-        assertTrue(description.contains(
-                "**Твой MMR:** `999` • **Место в топе:** **#10** • **Сыграно игр:** 3"
-        ));
-        assertTrue(description.contains("*Дата окончания сезона:"));
+        assertTrue(description.contains("Твой MMR: `999`"));
+        assertTrue(description.contains("Место в топе: #10"));
+        assertTrue(description.contains("Сыграно игр: 3"));
+        assertTrue(description.contains("*Дата начала сезона: 01.09.2026*"));
+        assertTrue(description.contains("*Дата окончания сезона: 01.12.2026*"));
     }
 
     @Test
