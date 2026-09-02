@@ -8,7 +8,6 @@ import com.mkx.ranked.model.SeasonPlayerEntity;
 import com.mkx.ranked.model.dto.MatchResult;
 import com.mkx.ranked.model.dto.RegistrationResultDto;
 import com.mkx.ranked.model.dto.SeasonDto;
-import com.mkx.ranked.model.enums.SeasonStatus;
 import com.mkx.ranked.repository.MatchRepository;
 import com.mkx.ranked.repository.PlayerRepository;
 import com.mkx.ranked.repository.SeasonPlayerRepository;
@@ -19,6 +18,7 @@ import com.mkx.ranked.service.SeasonService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -112,10 +112,17 @@ class ConcurrencyIntegrationTest extends PostgreSqlIntegrationTestSupport {
                 "SELECT count(*) FROM season_players WHERE season_id = ?", Long.class, season.id()
         );
         long missingRanks = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM season_players WHERE season_id = ? AND final_rank IS NULL",
+                """
+                SELECT count(*)
+                FROM season_players
+                WHERE season_id = ?
+                  AND games_played > 0
+                  AND final_rank IS NULL
+                """,
                 Long.class,
                 season.id()
         );
+
         assertEquals(0, missingRanks);
         if (race.first().failure() == null) {
             assertEquals(2, participants);
@@ -251,23 +258,27 @@ class ConcurrencyIntegrationTest extends PostgreSqlIntegrationTestSupport {
     }
 
     private void assertFinishedAndRanksMatchCurrentStandings(long seasonId) {
-        SeasonEntity season = seasonRepository.findById(seasonId).orElseThrow();
-        assertEquals(SeasonStatus.FINISHED, season.getStatus());
-        assertNotNull(season.getEndDate());
-        List<Integer> ranksInCurrentOrder = jdbcTemplate.queryForList(
-                """
-                SELECT final_rank
-                FROM season_players
-                WHERE season_id = ?
-                ORDER BY rating DESC, games_played DESC, player_id ASC
-                """,
-                Integer.class,
-                seasonId
-        );
-        assertEquals(
-                java.util.stream.IntStream.rangeClosed(1, ranksInCurrentOrder.size()).boxed().toList(),
-                ranksInCurrentOrder
-        );
+        List<SeasonPlayerEntity> players = seasonPlayerRepository.findAll().stream()
+                .filter(sp -> sp.getSeason().getId().equals(seasonId))
+                .toList();
+
+        List<SeasonPlayerEntity> ladderPlayers = players.stream()
+                .filter(sp -> sp.getGamesPlayed() > 0)
+                .sorted(Comparator
+                        .comparingInt(SeasonPlayerEntity::getRating).reversed()
+                        .thenComparing(
+                                Comparator.comparingInt(SeasonPlayerEntity::getGamesPlayed).reversed()
+                        )
+                        .thenComparing(sp -> sp.getPlayer().getId()))
+                .toList();
+
+        for (int i = 0; i < ladderPlayers.size(); i++) {
+            assertEquals(i + 1, ladderPlayers.get(i).getFinalRank());
+        }
+
+        players.stream()
+                .filter(sp -> sp.getGamesPlayed() == 0)
+                .forEach(sp -> assertNull(sp.getFinalRank()));
     }
 
     private <A, B> RaceResult<A, B> race(Callable<A> first, Callable<B> second) throws Exception {

@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: ${DB_URL}
+    url: jdbc:postgresql://localhost:5433/mkx_ranked
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
 
