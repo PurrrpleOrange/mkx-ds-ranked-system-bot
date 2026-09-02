@@ -87,14 +87,25 @@ public class SeasonService {
 
     @Transactional
     public SeasonDto createNewSeason(String name, LocalDateTime plannedEndDate) {
-        if (name == null || name.isBlank()) {
-            throw new BusinessException("Season name must not be blank.");
+        int nextSeasonNumber = Math.toIntExact(seasonRepository.getNextSeasonNumber());
+        return createNewSeason(nextSeasonNumber, name, plannedEndDate);
+    }
+
+    @Transactional
+    public SeasonDto createNewSeason(Integer seasonNumber, String name, LocalDateTime plannedEndDate) {
+        int normalizedSeasonNumber = normalizeSeasonNumber(seasonNumber);
+        String normalizedName = normalizeSeasonName(name);
+        if (seasonRepository.existsBySeasonNumber(normalizedSeasonNumber)) {
+            throw duplicateSeasonNumber(normalizedSeasonNumber);
         }
 
-        int nextSeasonNumber = Math.toIntExact(seasonRepository.getNextSeasonNumber());
-
-        SeasonEntity season = new SeasonEntity(nextSeasonNumber, name.trim(), plannedEndDate);
-        SeasonEntity saved = seasonRepository.save(season);
+        SeasonEntity season = new SeasonEntity(normalizedSeasonNumber, normalizedName, plannedEndDate);
+        SeasonEntity saved;
+        try {
+            saved = seasonRepository.saveAndFlush(season);
+        } catch (DataIntegrityViolationException exception) {
+            throw duplicateSeasonNumber(normalizedSeasonNumber);
+        }
         log.info("SEASON SUCCESS: created season #{} ({})", saved.getSeasonNumber(), saved.getName());
         return toDto(saved);
     }
@@ -127,13 +138,31 @@ public class SeasonService {
     }
 
     @Transactional
-    public SeasonDto updateActiveSeasonInfo(String name, LocalDateTime plannedEndDate) {
+    public SeasonDto updateActiveSeasonInfo(
+            Integer seasonNumber,
+            String name,
+            LocalDateTime plannedEndDate
+    ) {
+        int normalizedSeasonNumber = normalizeSeasonNumber(seasonNumber);
         String normalizedName = normalizeSeasonName(name);
         SeasonEntity currentSeason = seasonRepository.findByStatusForUpdate(SeasonStatus.ACTIVE)
                 .orElseThrow(SeasonNotActiveException::new);
+        if (!currentSeason.getSeasonNumber().equals(normalizedSeasonNumber)
+                && seasonRepository.existsBySeasonNumberAndIdNot(
+                        normalizedSeasonNumber,
+                        currentSeason.getId()
+                )) {
+            throw duplicateSeasonNumber(normalizedSeasonNumber);
+        }
+        currentSeason.setSeasonNumber(normalizedSeasonNumber);
         currentSeason.setName(normalizedName);
         currentSeason.setPlannedEndDate(plannedEndDate);
-        SeasonEntity saved = seasonRepository.save(currentSeason);
+        SeasonEntity saved;
+        try {
+            saved = seasonRepository.saveAndFlush(currentSeason);
+        } catch (DataIntegrityViolationException exception) {
+            throw duplicateSeasonNumber(normalizedSeasonNumber);
+        }
         log.info("SEASON SUCCESS: updated information for season #{}", currentSeason.getSeasonNumber());
         return toDto(saved);
     }
@@ -215,6 +244,17 @@ public class SeasonService {
             throw new BusinessException("Season name must not exceed 100 characters.");
         }
         return normalizedName;
+    }
+
+    private int normalizeSeasonNumber(Integer seasonNumber) {
+        if (seasonNumber == null || seasonNumber <= 0) {
+            throw new BusinessException("Season number must be a positive integer.");
+        }
+        return seasonNumber;
+    }
+
+    private BusinessException duplicateSeasonNumber(int seasonNumber) {
+        return new BusinessException("Season #" + seasonNumber + " already exists.");
     }
 
     private SeasonDto finishSeason(SeasonEntity season) {

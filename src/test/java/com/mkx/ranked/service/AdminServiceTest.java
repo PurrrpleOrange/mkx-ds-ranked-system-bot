@@ -47,9 +47,9 @@ class AdminServiceTest {
     void createsSeasonThroughSeasonService() {
         LocalDateTime plannedEnd = LocalDateTime.of(2026, 12, 1, 20, 0);
         SeasonDto expected = season(8, SeasonStatus.CREATED);
-        when(seasonService.createNewSeason("Winter Clash", plannedEnd)).thenReturn(expected);
+        when(seasonService.createNewSeason(8, "Winter Clash", plannedEnd)).thenReturn(expected);
 
-        assertSame(expected, service.createSeason("Winter Clash", plannedEnd));
+        assertSame(expected, service.createSeason(8, "Winter Clash", plannedEnd));
     }
 
     @Test
@@ -116,9 +116,9 @@ class AdminServiceTest {
     void updatesActiveSeasonInformationThroughLifecycleService() {
         LocalDateTime plannedEnd = LocalDateTime.of(2026, 12, 15, 20, 0);
         SeasonDto expected = season(8, SeasonStatus.ACTIVE);
-        when(seasonService.updateActiveSeasonInfo("Winter Clash", plannedEnd)).thenReturn(expected);
+        when(seasonService.updateActiveSeasonInfo(4, "Winter Clash", plannedEnd)).thenReturn(expected);
 
-        assertSame(expected, service.updateActiveSeasonInfo("Winter Clash", plannedEnd));
+        assertSame(expected, service.updateActiveSeasonInfo(4, "Winter Clash", plannedEnd));
     }
 
     @Test

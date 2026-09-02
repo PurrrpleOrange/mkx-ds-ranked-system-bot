@@ -34,8 +34,8 @@ public class AdminService {
         this.seasonHistoryService = seasonHistoryService;
     }
 
-    public SeasonDto createSeason(String name, LocalDateTime plannedEndDate) {
-        return seasonService.createNewSeason(name, plannedEndDate);
+    public SeasonDto createSeason(int seasonNumber, String name, LocalDateTime plannedEndDate) {
+        return seasonService.createNewSeason(seasonNumber, name, plannedEndDate);
     }
 
     public SeasonDto activateSeason(int seasonNumber) {
@@ -64,8 +64,12 @@ public class AdminService {
         return seasonService.updatePlannedEndDate(plannedEndDate);
     }
 
-    public SeasonDto updateActiveSeasonInfo(String name, LocalDateTime plannedEndDate) {
-        return seasonService.updateActiveSeasonInfo(name, plannedEndDate);
+    public SeasonDto updateActiveSeasonInfo(
+            int seasonNumber,
+            String name,
+            LocalDateTime plannedEndDate
+    ) {
+        return seasonService.updateActiveSeasonInfo(seasonNumber, name, plannedEndDate);
     }
 
     public AdminSeasonStatisticsDto getPreviousSeasonStatisticsById(long seasonId) {

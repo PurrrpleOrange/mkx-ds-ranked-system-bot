@@ -194,6 +194,7 @@ public class AdminCommandListener extends ListenerAdapter {
     }
 
     private Modal seasonCreateModal() {
+        TextInput seasonNumber = numericInput("season_number", "Например: 4", 10);
         TextInput name = TextInput.create("season_name", TextInputStyle.SHORT)
                 .setPlaceholder("Например: Winter Clash")
                 .setRequired(true)
@@ -207,6 +208,7 @@ public class AdminCommandListener extends ListenerAdapter {
 
         return Modal.create("admin:modal:season_create", "Создание сезона")
                 .addComponents(
+                        Label.of("Номер сезона", seasonNumber),
                         Label.of("Название", name),
                         Label.of("Плановое окончание (необязательно)", plannedEnd)
                 )
@@ -262,6 +264,11 @@ public class AdminCommandListener extends ListenerAdapter {
     }
 
     private Modal seasonUpdateModal(SeasonDto season) {
+        TextInput seasonNumber = TextInput.create("season_number", TextInputStyle.SHORT)
+                .setValue(String.valueOf(season.seasonNumber()))
+                .setRequired(true)
+                .setRequiredRange(1, 10)
+                .build();
         TextInput name = TextInput.create("season_name", TextInputStyle.SHORT)
                 .setValue(season.name())
                 .setRequired(true)
@@ -277,6 +284,7 @@ public class AdminCommandListener extends ListenerAdapter {
 
         return Modal.create("admin:modal:season_update", "Изменение ACTIVE сезона")
                 .addComponents(
+                        Label.of("Номер сезона", seasonNumber),
                         Label.of("Название", name),
                         Label.of("Плановое окончание (пусто — убрать)", plannedEndBuilder.build())
                 )
@@ -311,10 +319,11 @@ public class AdminCommandListener extends ListenerAdapter {
     }
 
     private void createSeason(ModalInteractionEvent event) {
+        int seasonNumber = parsePositiveInt(requireModalValue(event, "season_number"), "Номер сезона");
         String name = requireModalValue(event, "season_name");
         String plannedEndValue = optionalModalValue(event, "planned_end");
         LocalDateTime plannedEnd = plannedEndValue == null ? null : parseDateTime(plannedEndValue);
-        SeasonDto season = adminService.createSeason(name, plannedEnd);
+        SeasonDto season = adminService.createSeason(seasonNumber, name, plannedEnd);
         event.replyEmbeds(formatter.seasonInfo(season)).setEphemeral(true).queue();
     }
 
@@ -358,10 +367,11 @@ public class AdminCommandListener extends ListenerAdapter {
     }
 
     private void updateSeasonInfo(ModalInteractionEvent event) {
+        int seasonNumber = parsePositiveInt(requireModalValue(event, "season_number"), "Номер сезона");
         String name = requireModalValue(event, "season_name");
         String plannedEndValue = optionalModalValue(event, "planned_end");
         LocalDateTime plannedEnd = plannedEndValue == null ? null : parseDateTime(plannedEndValue);
-        SeasonDto season = adminService.updateActiveSeasonInfo(name, plannedEnd);
+        SeasonDto season = adminService.updateActiveSeasonInfo(seasonNumber, name, plannedEnd);
         event.replyEmbeds(formatter.seasonInfo(season)).setEphemeral(true).queue();
     }
 

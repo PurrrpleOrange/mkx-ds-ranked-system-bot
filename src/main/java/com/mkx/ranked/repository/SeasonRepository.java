@@ -35,6 +35,10 @@ public interface SeasonRepository extends JpaRepository<SeasonEntity, Long> {
 
     Optional<SeasonEntity> findBySeasonNumber(Integer seasonNumber);
 
+    boolean existsBySeasonNumber(Integer seasonNumber);
+
+    boolean existsBySeasonNumberAndIdNot(Integer seasonNumber, Long id);
+
     Optional<SeasonEntity> findFirstByStatusOrderBySeasonNumberDesc(SeasonStatus status);
 
     List<SeasonEntity> findAllByStatusOrderByEndDateDescSeasonNumberDesc(SeasonStatus status);
