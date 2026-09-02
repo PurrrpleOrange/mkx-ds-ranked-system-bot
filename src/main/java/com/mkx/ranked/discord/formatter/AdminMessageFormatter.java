@@ -245,7 +245,7 @@ public class AdminMessageFormatter {
 
         List<String> lines = new ArrayList<>();
         for (LeaderboardEntryDto player : players) {
-            lines.add("%d. *%s* - %d (%d %s)".formatted(
+            lines.add("%d. %s - %d (%d %s)".formatted(
                     player.rank(),
                     player.displayName(),
                     player.rating(),
