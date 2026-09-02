@@ -79,7 +79,9 @@ class RankedMessageFormatterTest {
         assertTrue(rendered.contains("Scorpion"));
         assertTrue(rendered.contains("Sub-Zero"));
         assertTrue(rendered.contains("01.09.2026 10:00"));
-        assertTrue(rendered.contains("```text"));
+        assertTrue(rendered.contains("```ansi"));
+        assertTrue(rendered.contains("\u001B[1;37;42mWIN \u001B[0m"));
+        assertTrue(rendered.contains("\u001B[1;37;41mLOSE\u001B[0m"));
         assertFalse(rendered.toLowerCase().contains("страница"));
     }
 

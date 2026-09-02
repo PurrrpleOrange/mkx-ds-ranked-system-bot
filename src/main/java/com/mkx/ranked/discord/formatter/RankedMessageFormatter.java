@@ -25,6 +25,9 @@ public class RankedMessageFormatter {
     private static final Color INFORMATION_COLOR = new Color(0, 255, 200);
     private static final int DISCORD_MESSAGE_CHUNK_SIZE = 1900;
     private static final DateTimeFormatter TABLE_DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+    private static final String ANSI_RESET = "\u001B[0m";
+    private static final String ANSI_WIN = "\u001B[1;37;42mWIN " + ANSI_RESET;
+    private static final String ANSI_LOSE = "\u001B[1;37;41mLOSE" + ANSI_RESET;
 
     public MessageEmbed rankedMenu(PlayerProfileDto profile) {
         EmbedBuilder embed = new EmbedBuilder();
@@ -149,14 +152,14 @@ public class RankedMessageFormatter {
         List<List<String>> rows = matches.stream()
                 .map(match -> List.of(
                         String.valueOf(match.matchId()),
-                        match.win() ? "WIN" : "LOSE",
+                        match.win() ? ANSI_WIN : ANSI_LOSE,
                         match.opponentDisplayName(),
                         match.scoreFor() + ":" + match.scoreAgainst(),
                         "%+d".formatted(match.ratingDelta()),
                         formatTableDateTime(match.createdAt())
                 ))
                 .toList();
-        return DiscordTableFormatter.render(
+        return DiscordTableFormatter.renderAnsi(
                 "ИСТОРИЯ МАТЧЕЙ ТЕКУЩЕГО СЕЗОНА",
                 null,
                 columns,

@@ -2,8 +2,11 @@ package com.mkx.ranked.discord.formatter;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 final class DiscordTableFormatter {
+
+    private static final Pattern ANSI_ESCAPE_SEQUENCE = Pattern.compile("\\u001B\\[[0-9;]*m");
 
     enum Alignment {
         LEFT,
@@ -41,6 +44,18 @@ final class DiscordTableFormatter {
                 List.of(new Group(null, sourceRows)),
                 maxLength
         );
+    }
+
+    static List<String> renderAnsi(
+            String heading,
+            String intro,
+            List<Column> columns,
+            List<List<String>> sourceRows,
+            int maxLength
+    ) {
+        return render(heading, intro, columns, sourceRows, maxLength).stream()
+                .map(chunk -> chunk.replace("```text\n", "```ansi\n"))
+                .toList();
     }
 
     static List<String> renderGrouped(
@@ -178,7 +193,8 @@ final class DiscordTableFormatter {
     }
 
     private static int displayLength(String value) {
-        return value.codePointCount(0, value.length());
+        String visibleValue = ANSI_ESCAPE_SEQUENCE.matcher(value).replaceAll("");
+        return visibleValue.codePointCount(0, visibleValue.length());
     }
 
     private static String sanitizeCell(String value) {
@@ -187,6 +203,6 @@ final class DiscordTableFormatter {
         }
         return value.replaceAll("\\s+", " ")
                 .replace("```", "'''")
-                .trim();
+                .strip();
     }
 }
