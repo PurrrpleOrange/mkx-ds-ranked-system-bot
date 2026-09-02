@@ -75,37 +75,46 @@ public class RegistrationService {
         PlayerEntity player = existingPlayer
                 .orElseGet(() -> new PlayerEntity(discordId, currentDiscordUsername));
         player.setUsername(currentDiscordUsername);
-        PlayerEntity savedPlayer = playerRepository.save(player);
+        PlayerEntity savedPlayer;
         SeasonPlayerEntity seasonPlayer;
         try {
+            savedPlayer = playerRepository.save(player);
             seasonPlayer = seasonPlayerRepository.saveAndFlush(
                     new SeasonPlayerEntity(savedPlayer, season, displayName)
             );
         } catch (DataIntegrityViolationException exception) {
-            if (isDisplayNameUniqueConstraint(exception)) {
+            if (hasConstraint(exception, "uq_season_player_display_name_ci")) {
                 throw new BusinessException(
                         "Username '" + displayName + "' is already registered in the current season."
                 );
+            }
+            if (hasConstraint(exception, "players_discord_id_key", "uq_season_player")) {
+                throw new BusinessException("You are already registered in the current season.");
             }
             throw exception;
         }
         return toResult(savedPlayer, seasonPlayer, season);
     }
 
-    private boolean isDisplayNameUniqueConstraint(Throwable throwable) {
+    private boolean hasConstraint(Throwable throwable, String... constraintNames) {
         Throwable current = throwable;
         while (current != null) {
-            if (current instanceof ConstraintViolationException constraintViolation
-                    && "uq_season_player_display_name_ci".equalsIgnoreCase(
-                            constraintViolation.getConstraintName()
-                    )) {
-                return true;
+            if (current instanceof ConstraintViolationException constraintViolation) {
+                for (String constraintName : constraintNames) {
+                    if (constraintName.equalsIgnoreCase(constraintViolation.getConstraintName())) {
+                        return true;
+                    }
+                }
             }
 
             String message = current.getMessage();
-            if (message != null
-                    && message.toLowerCase(Locale.ROOT).contains("uq_season_player_display_name_ci")) {
-                return true;
+            if (message != null) {
+                String normalizedMessage = message.toLowerCase(Locale.ROOT);
+                for (String constraintName : constraintNames) {
+                    if (normalizedMessage.contains(constraintName.toLowerCase(Locale.ROOT))) {
+                        return true;
+                    }
+                }
             }
             current = current.getCause();
         }

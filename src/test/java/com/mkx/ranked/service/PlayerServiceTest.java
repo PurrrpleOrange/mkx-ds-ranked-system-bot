@@ -1,5 +1,6 @@
 package com.mkx.ranked.service;
 
+import com.mkx.ranked.exception.PlayerNotFoundException;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
@@ -13,10 +14,24 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class PlayerServiceTest {
+
+    @Test
+    void adminPlayerLookupRejectsUnknownDiscordUser() {
+        PlayerRepository playerRepository = mock(PlayerRepository.class);
+        PlayerService service = new PlayerService(
+                playerRepository,
+                mock(SeasonPlayerRepository.class),
+                mock(SeasonService.class)
+        );
+        when(playerRepository.findByDiscordId(999L)).thenReturn(Optional.empty());
+
+        assertThrows(PlayerNotFoundException.class, () -> service.getAdminPlayerInfo(999L));
+    }
 
     @Test
     void adminPlayerInfoUsesActiveSeasonProfileAndLeaderboardRank() {

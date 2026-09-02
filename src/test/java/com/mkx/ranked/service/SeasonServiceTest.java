@@ -1,6 +1,7 @@
 package com.mkx.ranked.service;
 
 import com.mkx.ranked.exception.BusinessException;
+import com.mkx.ranked.exception.SeasonNotFoundException;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
@@ -94,6 +95,16 @@ class SeasonServiceTest {
     }
 
     @Test
+    void refusesToActivateAlreadyActiveSeason() {
+        SeasonEntity season = season(1L, 1, SeasonStatus.ACTIVE);
+        when(seasonRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(season));
+
+        assertThrows(BusinessException.class, () -> service.activateSeason(1L));
+
+        verify(seasonRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void refusesToActivateSecondSeason() {
         SeasonEntity season = season(2L, 2, SeasonStatus.CREATED);
         when(seasonRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(season));
@@ -144,6 +155,14 @@ class SeasonServiceTest {
 
         assertEquals(List.of(9, 8), result.stream().map(SeasonDto::seasonNumber).toList());
         assertEquals(List.of(90L, 80L), result.stream().map(SeasonDto::id).toList());
+    }
+
+    @Test
+    void adminLifecycleLookupRejectsUnknownSeason() {
+        when(seasonRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
+
+        assertThrows(SeasonNotFoundException.class, () -> service.activateSeason(999L));
+        assertThrows(SeasonNotFoundException.class, () -> service.finishSeason(999L));
     }
 
     @Test

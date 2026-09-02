@@ -1,5 +1,7 @@
 package com.mkx.ranked.service;
 
+import com.mkx.ranked.exception.BusinessException;
+import com.mkx.ranked.exception.SeasonNotFoundException;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
 import com.mkx.ranked.model.SeasonPlayerEntity;
@@ -20,8 +22,11 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SeasonHistoryServiceTest {
@@ -65,6 +70,39 @@ class SeasonHistoryServiceTest {
         assertEquals(1, result.size());
         assertEquals(finishedSeason.getStartDate(), result.get(0).startDate());
         assertEquals(finishedSeason.getEndDate(), result.get(0).endDate());
+        verify(seasonRepository).findAllByStatusOrderByEndDateDescSeasonNumberDesc(SeasonStatus.FINISHED);
+    }
+
+    @Test
+    void findsFinishedSeasonByIdAndSeasonNumber() {
+        when(seasonRepository.findById(30L)).thenReturn(Optional.of(finishedSeason));
+        when(seasonRepository.findBySeasonNumber(3)).thenReturn(Optional.of(finishedSeason));
+
+        assertEquals(30L, service.getFinishedSeason(30L).id());
+        assertEquals(3, service.getFinishedSeasonByNumber(3).seasonNumber());
+    }
+
+    @Test
+    void missingOrNonFinishedSeasonCannotBeReadAsHistory() {
+        SeasonEntity active = new SeasonEntity(4, "Active", null);
+        ReflectionTestUtils.setField(active, "id", 40L);
+        active.setStatus(SeasonStatus.ACTIVE);
+        when(seasonRepository.findById(99L)).thenReturn(Optional.empty());
+        when(seasonRepository.findById(40L)).thenReturn(Optional.of(active));
+
+        assertThrows(SeasonNotFoundException.class, () -> service.getFinishedSeason(99L));
+        assertThrows(BusinessException.class, () -> service.getFinishedSeason(40L));
+    }
+
+    @Test
+    void finalLeaderboardIsReturnedOnlyAfterFinishedValidation() {
+        LeaderboardEntryDto entry = leaderboardEntry(1, 1400);
+        when(seasonRepository.findById(30L)).thenReturn(Optional.of(finishedSeason));
+        when(leaderboardService.getLeaderboardForSeason(30L)).thenReturn(List.of(entry));
+
+        List<LeaderboardEntryDto> result = service.getFinishedSeasonLeaderboard(30L);
+
+        assertEquals(List.of(entry), result);
     }
 
     @Test
@@ -85,6 +123,17 @@ class SeasonHistoryServiceTest {
         assertEquals("Sub-Zero", result.orElseThrow().displayName());
         assertEquals(4, result.orElseThrow().finalRank());
         assertEquals(1350, result.orElseThrow().rating());
+    }
+
+    @Test
+    void absentPlayerProducesEmptySeasonSnapshot() {
+        when(seasonRepository.findById(30L)).thenReturn(Optional.of(finishedSeason));
+        when(seasonPlayerRepository.findBySeasonAndPlayerDiscordId(finishedSeason, 999L))
+                .thenReturn(Optional.empty());
+
+        Optional<SeasonPlayerHistoryDto> result = service.findPlayerInFinishedSeason(30L, 999L);
+
+        assertFalse(result.isPresent());
     }
 
     @Test
