@@ -179,6 +179,29 @@ class SeasonServiceTest {
         verify(seasonRepository).save(active);
     }
 
+    @Test
+    void updatesActiveSeasonNameAndPlannedEndDateUnderOneLock() {
+        SeasonEntity active = season(90L, 9, SeasonStatus.ACTIVE);
+        LocalDateTime plannedEnd = LocalDateTime.of(2026, 12, 15, 20, 0);
+        when(seasonRepository.findByStatusForUpdate(SeasonStatus.ACTIVE)).thenReturn(Optional.of(active));
+        when(seasonRepository.save(active)).thenReturn(active);
+
+        SeasonDto result = service.updateActiveSeasonInfo("  Winter Clash  ", plannedEnd);
+
+        assertEquals("Winter Clash", result.name());
+        assertEquals(plannedEnd, result.plannedEndDate());
+        verify(seasonRepository).findByStatusForUpdate(SeasonStatus.ACTIVE);
+        verify(seasonRepository).save(active);
+    }
+
+    @Test
+    void activeSeasonInformationRejectsInvalidNameBeforeLocking() {
+        assertThrows(BusinessException.class, () -> service.updateActiveSeasonInfo("   ", null));
+        assertThrows(BusinessException.class, () -> service.updateActiveSeasonInfo("x".repeat(101), null));
+
+        verify(seasonRepository, never()).findByStatusForUpdate(any());
+    }
+
     private SeasonEntity season(long id, int number, SeasonStatus status) {
         SeasonEntity season = new SeasonEntity(number, "Season " + number, null);
         ReflectionTestUtils.setField(season, "id", id);

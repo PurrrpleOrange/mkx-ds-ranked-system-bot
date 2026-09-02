@@ -2,6 +2,7 @@ package com.mkx.ranked.service;
 
 import com.mkx.ranked.model.dto.AdminMatchDto;
 import com.mkx.ranked.model.dto.AdminPlayerDto;
+import com.mkx.ranked.model.dto.AdminRegisteredPlayerDto;
 import com.mkx.ranked.model.dto.AdminSeasonStatisticsDto;
 import com.mkx.ranked.model.dto.LeaderboardEntryDto;
 import com.mkx.ranked.model.dto.SeasonDto;
@@ -63,6 +64,10 @@ public class AdminService {
         return seasonService.updatePlannedEndDate(plannedEndDate);
     }
 
+    public SeasonDto updateActiveSeasonInfo(String name, LocalDateTime plannedEndDate) {
+        return seasonService.updateActiveSeasonInfo(name, plannedEndDate);
+    }
+
     public AdminSeasonStatisticsDto getPreviousSeasonStatisticsById(long seasonId) {
         return seasonHistoryService.getFinishedSeasonStatistics(seasonId);
     }
@@ -81,6 +86,10 @@ public class AdminService {
 
     public AdminPlayerDto getPlayerInfo(long discordId) {
         return playerService.getAdminPlayerInfo(discordId);
+    }
+
+    public List<AdminRegisteredPlayerDto> getAllRegisteredPlayers() {
+        return playerService.getAllRegisteredPlayersForActiveSeason();
     }
 
     public List<LeaderboardEntryDto> getActiveSeasonLeaderboard() {

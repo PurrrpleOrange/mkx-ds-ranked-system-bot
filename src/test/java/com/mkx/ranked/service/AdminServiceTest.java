@@ -2,6 +2,7 @@ package com.mkx.ranked.service;
 
 import com.mkx.ranked.model.dto.AdminMatchDto;
 import com.mkx.ranked.model.dto.AdminPlayerDto;
+import com.mkx.ranked.model.dto.AdminRegisteredPlayerDto;
 import com.mkx.ranked.model.dto.AdminSeasonStatisticsDto;
 import com.mkx.ranked.model.dto.LeaderboardEntryDto;
 import com.mkx.ranked.model.dto.SeasonDto;
@@ -112,6 +113,15 @@ class AdminServiceTest {
     }
 
     @Test
+    void updatesActiveSeasonInformationThroughLifecycleService() {
+        LocalDateTime plannedEnd = LocalDateTime.of(2026, 12, 15, 20, 0);
+        SeasonDto expected = season(8, SeasonStatus.ACTIVE);
+        when(seasonService.updateActiveSeasonInfo("Winter Clash", plannedEnd)).thenReturn(expected);
+
+        assertSame(expected, service.updateActiveSeasonInfo("Winter Clash", plannedEnd));
+    }
+
+    @Test
     void returnsPreviousSeasonStatisticsById() {
         AdminSeasonStatisticsDto expected = mock(AdminSeasonStatisticsDto.class);
         when(seasonHistoryService.getFinishedSeasonStatistics(70L)).thenReturn(expected);
@@ -148,6 +158,14 @@ class AdminServiceTest {
         when(playerService.getAdminPlayerInfo(123L)).thenReturn(expected);
 
         assertSame(expected, service.getPlayerInfo(123L));
+    }
+
+    @Test
+    void returnsAllRegisteredPlayersFromPlayerService() {
+        List<AdminRegisteredPlayerDto> expected = List.of(mock(AdminRegisteredPlayerDto.class));
+        when(playerService.getAllRegisteredPlayersForActiveSeason()).thenReturn(expected);
+
+        assertSame(expected, service.getAllRegisteredPlayers());
     }
 
     @Test

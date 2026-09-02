@@ -127,6 +127,18 @@ public class SeasonService {
     }
 
     @Transactional
+    public SeasonDto updateActiveSeasonInfo(String name, LocalDateTime plannedEndDate) {
+        String normalizedName = normalizeSeasonName(name);
+        SeasonEntity currentSeason = seasonRepository.findByStatusForUpdate(SeasonStatus.ACTIVE)
+                .orElseThrow(SeasonNotActiveException::new);
+        currentSeason.setName(normalizedName);
+        currentSeason.setPlannedEndDate(plannedEndDate);
+        SeasonEntity saved = seasonRepository.save(currentSeason);
+        log.info("SEASON SUCCESS: updated information for season #{}", currentSeason.getSeasonNumber());
+        return toDto(saved);
+    }
+
+    @Transactional
     public SeasonDto finishActiveSeason() {
         SeasonEntity currentSeason = seasonRepository.findByStatusForUpdate(SeasonStatus.ACTIVE)
                 .orElseThrow(SeasonNotActiveException::new);
@@ -192,6 +204,17 @@ public class SeasonService {
         }
         log.info("SEASON SUCCESS: activated season #{}", saved.getSeasonNumber());
         return toDto(saved);
+    }
+
+    private String normalizeSeasonName(String name) {
+        if (name == null || name.isBlank()) {
+            throw new BusinessException("Season name must not be blank.");
+        }
+        String normalizedName = name.trim();
+        if (normalizedName.length() > 100) {
+            throw new BusinessException("Season name must not exceed 100 characters.");
+        }
+        return normalizedName;
     }
 
     private SeasonDto finishSeason(SeasonEntity season) {

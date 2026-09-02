@@ -127,11 +127,12 @@ public class AdminCommandListener extends ListenerAdapter {
             case "admin:button:season_finish" -> finishSeason(event);
             case "admin:button:season_info" -> event.replyModal(seasonInfoModal()).queue();
             case "admin:button:season_list" -> showSeasonList(event);
-            case "admin:button:season_planned_end" -> event.replyModal(seasonPlannedEndModal()).queue();
+            case "admin:button:season_update", "admin:button:season_planned_end" -> openSeasonUpdateModal(event);
             case "admin:button:season_statistics" -> event.replyModal(seasonStatisticsModal()).queue();
             case "admin:button:match_info" -> event.replyModal(matchModal("info")).queue();
             case "admin:button:match_delete" -> event.replyModal(matchModal("delete")).queue();
             case "admin:button:player_info" -> openPlayerSelect(event);
+            case "admin:button:player_list" -> showRegisteredPlayers(event);
             case "admin:button:leaderboard_publish" -> publishLeaderboard(event);
             default -> event.reply("Эта административная кнопка устарела. Откройте `/admin` заново.")
                     .setEphemeral(true)
@@ -144,6 +145,7 @@ public class AdminCommandListener extends ListenerAdapter {
             case "admin:modal:season_create" -> createSeason(event);
             case "admin:modal:season_activate" -> activateSeason(event);
             case "admin:modal:season_info" -> showSeasonInfo(event);
+            case "admin:modal:season_update" -> updateSeasonInfo(event);
             case "admin:modal:season_planned_end" -> updatePlannedEndDate(event);
             case "admin:modal:season_statistics" -> showPreviousSeasonStatistics(event);
             case "admin:modal:match_info" -> showMatchInfo(event);
@@ -173,7 +175,7 @@ public class AdminCommandListener extends ListenerAdapter {
                         Button.secondary("admin:button:season_statistics", "Посмотреть статистику сезона")
                 ),
                 ActionRow.of(
-                        Button.secondary("admin:button:season_planned_end", "Изменить информацию о сезоне")
+                        Button.secondary("admin:button:season_update", "Изменить информацию о сезоне")
                 )
         );
     }
@@ -186,7 +188,8 @@ public class AdminCommandListener extends ListenerAdapter {
 
     private List<ActionRow> playerManagementRows() {
         return List.of(ActionRow.of(
-                Button.secondary("admin:button:player_info", "Посмотреть статистику игрока")
+                Button.secondary("admin:button:player_info", "Посмотреть статистику игрока"),
+                Button.secondary("admin:button:player_list", "Вывести всех зарегистрированных игроков")
         ));
     }
 
@@ -255,6 +258,28 @@ public class AdminCommandListener extends ListenerAdapter {
                 .build();
         return Modal.create("admin:modal:season_planned_end", "Плановое окончание ACTIVE сезона")
                 .addComponents(Label.of("Новая дата в ISO-формате", plannedEnd))
+                .build();
+    }
+
+    private Modal seasonUpdateModal(SeasonDto season) {
+        TextInput name = TextInput.create("season_name", TextInputStyle.SHORT)
+                .setValue(season.name())
+                .setRequired(true)
+                .setRequiredRange(1, 100)
+                .build();
+        var plannedEndBuilder = TextInput.create("planned_end", TextInputStyle.SHORT)
+                .setPlaceholder("Например: 2026-12-01T20:00")
+                .setRequired(false)
+                .setMaxLength(32);
+        if (season.plannedEndDate() != null) {
+            plannedEndBuilder.setValue(season.plannedEndDate().toString());
+        }
+
+        return Modal.create("admin:modal:season_update", "Изменение ACTIVE сезона")
+                .addComponents(
+                        Label.of("Название", name),
+                        Label.of("Плановое окончание (пусто — убрать)", plannedEndBuilder.build())
+                )
                 .build();
     }
 
@@ -327,6 +352,19 @@ public class AdminCommandListener extends ListenerAdapter {
         replyEmbedList(event, formatter.seasonList(adminService.getAllSeasons()), true);
     }
 
+    private void openSeasonUpdateModal(ButtonInteractionEvent event) {
+        SeasonDto season = adminService.getSeasonInfo(null);
+        event.replyModal(seasonUpdateModal(season)).queue();
+    }
+
+    private void updateSeasonInfo(ModalInteractionEvent event) {
+        String name = requireModalValue(event, "season_name");
+        String plannedEndValue = optionalModalValue(event, "planned_end");
+        LocalDateTime plannedEnd = plannedEndValue == null ? null : parseDateTime(plannedEndValue);
+        SeasonDto season = adminService.updateActiveSeasonInfo(name, plannedEnd);
+        event.replyEmbeds(formatter.seasonInfo(season)).setEphemeral(true).queue();
+    }
+
     private void updatePlannedEndDate(ModalInteractionEvent event) {
         LocalDateTime plannedEnd = parseDateTime(requireModalValue(event, "planned_end"));
         SeasonDto season = adminService.updateActiveSeasonPlannedEndDate(plannedEnd);
@@ -397,9 +435,19 @@ public class AdminCommandListener extends ListenerAdapter {
         event.replyEmbeds(formatter.playerInfo(player)).setEphemeral(true).queue();
     }
 
+    private void showRegisteredPlayers(IReplyCallback event) {
+        List<String> chunks = formatter.registeredPlayers(adminService.getAllRegisteredPlayers());
+        replyMessageChunks(event, chunks, true);
+    }
+
     private void publishLeaderboard(IReplyCallback event) {
         List<String> chunks = formatter.fullLeaderboard(adminService.getActiveSeasonLeaderboard());
-        event.reply(chunks.get(0)).setEphemeral(false).queue(hook -> {
+        replyMessageChunks(event, chunks, false);
+    }
+
+    private void replyMessageChunks(IReplyCallback event, List<String> chunks, boolean ephemeral) {
+        event.reply(chunks.get(0)).setEphemeral(ephemeral).queue(hook -> {
+            hook.setEphemeral(ephemeral);
             for (int i = 1; i < chunks.size(); i++) {
                 hook.sendMessage(chunks.get(i)).queue();
             }

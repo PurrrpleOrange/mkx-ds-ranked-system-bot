@@ -83,7 +83,8 @@
 | `admin:button:season_activate` | Активирует CREATED сезон и публикует объявление о новом сезоне и повторной регистрации. |
 | `admin:button:season_finish` | Завершает ACTIVE сезон, сохраняет finalRank и публикует объявление об окончании. |
 | `admin:button:season_statistics` | Показывает статистику завершённого сезона: игроков, матчи, средний рейтинг и топ-10. |
-| `admin:button:season_planned_end` | Кнопка «Изменить информацию о сезоне»: меняет плановую дату ACTIVE сезона под lifecycle write lock. |
+| `admin:button:season_update` | Кнопка «Изменить информацию о сезоне»: открывает форму изменения названия и плановой даты ACTIVE сезона. |
+| `admin:modal:season_update` | Атомарно сохраняет название и плановую дату ACTIVE сезона под lifecycle write lock. Пустая дата удаляет плановую дату. |
 
 ### Управление матчами и игроками
 
@@ -91,6 +92,7 @@
 | :--- | :--- |
 | `admin:button:match_delete` | Откатывает delta/gamesPlayed и удаляет матч через `MatchService.revertMatch()`. |
 | `admin:button:player_info` | Через Discord user-select показывает статистику игрока ACTIVE сезона. |
+| `admin:button:player_list` | Показывает всех зарегистрированных участников ACTIVE сезона, включая игроков с нулём матчей. |
 
 `player reset` намеренно отсутствует: изменение rating/gamesPlayed при сохранённой истории матчей нарушило бы инварианты данных. Legacy-кнопка `btn:admin_send_rating` удалена; её функция перенесена в кнопку публикации административной панели.
 

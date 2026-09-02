@@ -2,6 +2,7 @@ package com.mkx.ranked.discord.formatter;
 
 import com.mkx.ranked.model.dto.AdminMatchDto;
 import com.mkx.ranked.model.dto.AdminPlayerDto;
+import com.mkx.ranked.model.dto.AdminRegisteredPlayerDto;
 import com.mkx.ranked.model.dto.AdminSeasonStatisticsDto;
 import com.mkx.ranked.model.dto.LeaderboardEntryDto;
 import com.mkx.ranked.model.dto.SeasonDto;
@@ -47,7 +48,7 @@ public class AdminMessageFormatter {
                         **Активировать сезон** — выполнить CREATED → ACTIVE и опубликовать объявление.
                         **Завершить сезон** — завершить ACTIVE сезон, сохранить места и опубликовать объявление.
                         **Посмотреть статистику сезона** — результаты завершённого сезона по ID или номеру.
-                        **Изменить информацию о сезоне** — изменить плановую дату окончания ACTIVE сезона.
+                        **Изменить информацию о сезоне** — изменить название и плановую дату окончания ACTIVE сезона.
                         """)
                 .build();
     }
@@ -72,6 +73,7 @@ public class AdminMessageFormatter {
                 .setColor(INFORMATION_COLOR)
                 .setDescription("""
                         **Посмотреть статистику игрока** — выбрать Discord-пользователя и показать профиль текущего ACTIVE сезона: рейтинг, игры, место и дивизион.
+                        **Вывести всех зарегистрированных игроков** — показать всех участников ACTIVE сезона, включая игроков без матчей.
                         """)
                 .build();
     }
@@ -252,6 +254,31 @@ public class AdminMessageFormatter {
             message.append("%d. %s - %d (%d %s)%n".formatted(
                     player.rank(),
                     player.displayName(),
+                    player.rating(),
+                    player.gamesPlayed(),
+                    getGamesWord(player.gamesPlayed())
+            ));
+        }
+
+        return splitMessage(message.toString(), DISCORD_MESSAGE_CHUNK_SIZE);
+    }
+
+    public List<String> registeredPlayers(List<AdminRegisteredPlayerDto> players) {
+        StringBuilder message = new StringBuilder("**ЗАРЕГИСТРИРОВАННЫЕ ИГРОКИ ACTIVE-СЕЗОНА**\n\n")
+                .append("Всего: **")
+                .append(players.size())
+                .append("**\n\n");
+        if (players.isEmpty()) {
+            message.append("В текущем сезоне пока никто не зарегистрирован.\n");
+        }
+
+        for (int i = 0; i < players.size(); i++) {
+            AdminRegisteredPlayerDto player = players.get(i);
+            message.append("%d. **%s** — @%s (`%d`) | `%d MMR` | %d %s%n".formatted(
+                    i + 1,
+                    player.displayName(),
+                    player.discordUsername(),
+                    player.discordId(),
                     player.rating(),
                     player.gamesPlayed(),
                     getGamesWord(player.gamesPlayed())
