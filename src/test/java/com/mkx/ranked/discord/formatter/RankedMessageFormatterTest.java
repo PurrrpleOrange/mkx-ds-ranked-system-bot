@@ -71,24 +71,42 @@ class RankedMessageFormatterTest {
 
         String rendered = String.join("", formatter.matchHistory(matches));
 
-        assertTrue(rendered.contains("Матч #502"));
-        assertTrue(rendered.contains("Матч #501"));
+        assertTrue(rendered.contains("ID  ИТОГ"));
+        assertTrue(rendered.contains("502"));
+        assertTrue(rendered.contains("501"));
+        assertTrue(rendered.contains("WIN"));
+        assertTrue(rendered.contains("LOSE"));
         assertTrue(rendered.contains("Scorpion"));
         assertTrue(rendered.contains("Sub-Zero"));
+        assertTrue(rendered.contains("01.09.2026 10:00"));
+        assertTrue(rendered.contains("```text"));
         assertFalse(rendered.toLowerCase().contains("страница"));
     }
 
     @Test
     void fullLeaderboardShowsAllPlayersWithoutPagination() {
         List<LeaderboardEntryDto> players = List.of(
-                new LeaderboardEntryDto(1, 1L, 11L, "First", 1400, 10, "Elder God", "🏆"),
-                new LeaderboardEntryDto(2, 2L, 22L, "Second", 1300, 8, "God", "🥈")
+                new LeaderboardEntryDto(1, 1L, 11L, "first.discord", "First", 1400, 10, "S-Tier", "🥇"),
+                new LeaderboardEntryDto(11, 2L, 22L, "second.discord", "Second", 1300, 8, "A-Tier", "🥈")
         );
 
         String rendered = String.join("", formatter.leaderboard(players));
 
-        assertTrue(rendered.contains("#1** First"));
-        assertTrue(rendered.contains("#2** Second"));
+        assertTrue(rendered.contains("#  НИК"));
+        assertTrue(rendered.contains("First"));
+        assertTrue(rendered.contains("Second"));
+        assertTrue(rendered.contains("@first.discord"));
+        assertTrue(rendered.contains("@second.discord"));
+        assertTrue(rendered.contains("1400"));
+        assertTrue(rendered.contains("🥇 S-Tier"));
+        assertTrue(rendered.contains("🥈 A-Tier"));
+        assertFalse(rendered.contains("ДИВИЗИОН"));
+        assertEquals(1, occurrences(rendered, "#  НИК"));
+        assertTrue(rendered.contains("```text"));
         assertFalse(rendered.toLowerCase().contains("страница"));
+    }
+
+    private int occurrences(String value, String fragment) {
+        return (value.length() - value.replace(fragment, "").length()) / fragment.length();
     }
 }

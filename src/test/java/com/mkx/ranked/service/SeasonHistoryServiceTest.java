@@ -161,6 +161,7 @@ class SeasonHistoryServiceTest {
                 rank,
                 rank,
                 100L + rank,
+                "discord-player-" + rank,
                 "Player " + rank,
                 rating,
                 10,

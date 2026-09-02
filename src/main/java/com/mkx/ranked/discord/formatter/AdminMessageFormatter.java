@@ -14,7 +14,9 @@ import java.awt.Color;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class AdminMessageFormatter {
@@ -129,21 +131,11 @@ public class AdminMessageFormatter {
 
     public MessageEmbed previousSeasonStatistics(AdminSeasonStatisticsDto statistics) {
         SeasonDto season = statistics.season();
-        StringBuilder top = new StringBuilder();
+        String top;
         if (statistics.topPlayers().isEmpty()) {
-            top.append("В сезоне не было игроков со сыгранными матчами.");
+            top = "В сезоне не было игроков со сыгранными матчами.";
         } else {
-            for (LeaderboardEntryDto player : statistics.topPlayers()) {
-                top.append("**#")
-                        .append(player.rank())
-                        .append("** ")
-                        .append(player.displayName())
-                        .append(" — `")
-                        .append(player.rating())
-                        .append(" MMR` (игр: ")
-                        .append(player.gamesPlayed())
-                        .append(")\n");
-            }
+            top = leaderboardTable(null, null, statistics.topPlayers(), EMBED_DESCRIPTION_LIMIT).get(0);
         }
 
         return new EmbedBuilder()
@@ -206,28 +198,31 @@ public class AdminMessageFormatter {
     }
 
     public List<MessageEmbed> seasonList(List<SeasonDto> seasons) {
-        List<String> descriptions = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-
+        List<String> descriptions;
         if (seasons.isEmpty()) {
-            descriptions.add("Сезоны пока не созданы.");
+            descriptions = List.of("Сезоны пока не созданы.");
         } else {
-            for (SeasonDto season : seasons) {
-                String line = "**#%d** • ID: `%d` • `%s` — %s%n".formatted(
-                        season.seasonNumber(),
-                        season.id(),
-                        season.status().name(),
-                        season.name()
-                );
-                if (!current.isEmpty() && current.length() + line.length() > EMBED_DESCRIPTION_LIMIT) {
-                    descriptions.add(current.toString());
-                    current.setLength(0);
-                }
-                current.append(line);
-            }
-            if (!current.isEmpty()) {
-                descriptions.add(current.toString());
-            }
+            List<DiscordTableFormatter.Column> columns = List.of(
+                    DiscordTableFormatter.Column.right("ID"),
+                    DiscordTableFormatter.Column.right("№"),
+                    DiscordTableFormatter.Column.left("СТАТУС"),
+                    DiscordTableFormatter.Column.left("НАЗВАНИЕ")
+            );
+            List<List<String>> rows = seasons.stream()
+                    .map(season -> List.of(
+                            String.valueOf(season.id()),
+                            String.valueOf(season.seasonNumber()),
+                            season.status().name(),
+                            season.name()
+                    ))
+                    .toList();
+            descriptions = DiscordTableFormatter.render(
+                    null,
+                    null,
+                    columns,
+                    rows,
+                    EMBED_DESCRIPTION_LIMIT
+            );
         }
 
         List<MessageEmbed> embeds = new ArrayList<>();
@@ -244,79 +239,139 @@ public class AdminMessageFormatter {
         return embeds;
     }
 
-    public List<String> fullLeaderboard(List<LeaderboardEntryDto> players) {
-        StringBuilder message = new StringBuilder("**АКТУАЛЬНЫЙ РЕЙТИНГ MKX RANKED**\n\n");
+    public List<MessageEmbed> fullLeaderboard(List<LeaderboardEntryDto> players) {
         if (players.isEmpty()) {
-            message.append("Таблица лидеров пока пуста.\n");
+            return List.of(new EmbedBuilder()
+                    .setTitle("Актуальный рейтинг MKX Ranked")
+                    .setColor(INFORMATION_COLOR)
+                    .setDescription("Таблица лидеров пока пуста.")
+                    .build());
         }
 
+        Map<Division, List<LeaderboardEntryDto>> playersByDivision = new LinkedHashMap<>();
         for (LeaderboardEntryDto player : players) {
-            message.append("%d. %s - %d (%d %s)%n".formatted(
-                    player.rank(),
-                    player.displayName(),
-                    player.rating(),
-                    player.gamesPlayed(),
-                    getGamesWord(player.gamesPlayed())
-            ));
+            Division division = new Division(player.tierName(), player.tierEmoji());
+            playersByDivision.computeIfAbsent(division, ignored -> new ArrayList<>()).add(player);
         }
 
-        return splitMessage(message.toString(), DISCORD_MESSAGE_CHUNK_SIZE);
+        List<DiscordTableFormatter.Column> columns = List.of(
+                DiscordTableFormatter.Column.right("#"),
+                DiscordTableFormatter.Column.left("НИК"),
+                DiscordTableFormatter.Column.left("DISCORD"),
+                DiscordTableFormatter.Column.right("MMR"),
+                DiscordTableFormatter.Column.right("ИГРЫ")
+        );
+        List<MessageEmbed> result = new ArrayList<>();
+        for (Map.Entry<Division, List<LeaderboardEntryDto>> entry : playersByDivision.entrySet()) {
+            Division division = entry.getKey();
+            List<LeaderboardEntryDto> divisionPlayers = entry.getValue();
+            List<List<String>> rows = divisionPlayers.stream()
+                    .map(player -> List.of(
+                            String.valueOf(player.rank()),
+                            player.displayName(),
+                            "@" + player.discordUsername(),
+                            String.valueOf(player.rating()),
+                            String.valueOf(player.gamesPlayed())
+                    ))
+                    .toList();
+            List<String> descriptions = DiscordTableFormatter.render(
+                    null,
+                    null,
+                    columns,
+                    rows,
+                    EMBED_DESCRIPTION_LIMIT
+            );
+            for (int i = 0; i < descriptions.size(); i++) {
+                String title = "Актуальный рейтинг — " + division.label();
+                if (descriptions.size() > 1) {
+                    title += " — %d/%d".formatted(i + 1, descriptions.size());
+                }
+                result.add(new EmbedBuilder()
+                        .setTitle(title)
+                        .setColor(divisionColor(division.name()))
+                        .setDescription(descriptions.get(i))
+                        .build());
+            }
+        }
+        return result;
     }
 
     public List<String> registeredPlayers(List<AdminRegisteredPlayerDto> players) {
-        StringBuilder message = new StringBuilder("**ЗАРЕГИСТРИРОВАННЫЕ ИГРОКИ ACTIVE-СЕЗОНА**\n\n")
-                .append("Всего: **")
-                .append(players.size())
-                .append("**\n\n");
         if (players.isEmpty()) {
-            message.append("В текущем сезоне пока никто не зарегистрирован.\n");
+            return List.of("""
+                    **ЗАРЕГИСТРИРОВАННЫЕ ИГРОКИ ACTIVE-СЕЗОНА**
+
+                    Всего: **0**
+
+                    В текущем сезоне пока никто не зарегистрирован.
+                    """);
         }
 
-        for (int i = 0; i < players.size(); i++) {
-            AdminRegisteredPlayerDto player = players.get(i);
-            message.append("%d. **%s** — @%s (`%d`) | `%d MMR` | %d %s%n".formatted(
-                    i + 1,
-                    player.displayName(),
-                    player.discordUsername(),
-                    player.discordId(),
-                    player.rating(),
-                    player.gamesPlayed(),
-                    getGamesWord(player.gamesPlayed())
-            ));
-        }
-
-        return splitMessage(message.toString(), DISCORD_MESSAGE_CHUNK_SIZE);
+        List<List<String>> rows = players.stream()
+                .map(player -> List.of(
+                        String.valueOf(player.seasonPlayerId()),
+                        player.displayName(),
+                        "@" + player.discordUsername(),
+                        String.valueOf(player.rating()),
+                        String.valueOf(player.gamesPlayed())
+                ))
+                .toList();
+        List<DiscordTableFormatter.Column> columns = List.of(
+                DiscordTableFormatter.Column.right("ID"),
+                DiscordTableFormatter.Column.left("НИК"),
+                DiscordTableFormatter.Column.left("DISCORD"),
+                DiscordTableFormatter.Column.right("MMR"),
+                DiscordTableFormatter.Column.right("ИГРЫ")
+        );
+        return DiscordTableFormatter.render(
+                "ЗАРЕГИСТРИРОВАННЫЕ ИГРОКИ ACTIVE-СЕЗОНА",
+                "Всего: **" + players.size() + "**",
+                columns,
+                rows,
+                DISCORD_MESSAGE_CHUNK_SIZE
+        );
     }
 
-    private List<String> splitMessage(String message, int maxLength) {
-        List<String> chunks = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-
-        for (String line : message.split("\n")) {
-            if (!current.isEmpty() && current.length() + line.length() + 1 > maxLength) {
-                chunks.add(current.toString());
-                current.setLength(0);
-            }
-            current.append(line).append('\n');
-        }
-
-        if (!current.isEmpty()) {
-            chunks.add(current.toString());
-        }
-        return chunks;
+    private List<String> leaderboardTable(
+            String heading,
+            String intro,
+            List<LeaderboardEntryDto> players,
+            int maxLength
+    ) {
+        List<DiscordTableFormatter.Column> columns = List.of(
+                DiscordTableFormatter.Column.right("#"),
+                DiscordTableFormatter.Column.left("НИК"),
+                DiscordTableFormatter.Column.right("MMR"),
+                DiscordTableFormatter.Column.right("ИГРЫ"),
+                DiscordTableFormatter.Column.left("ДИВИЗИОН")
+        );
+        List<List<String>> rows = players.stream()
+                .map(player -> List.of(
+                        String.valueOf(player.rank()),
+                        player.displayName(),
+                        String.valueOf(player.rating()),
+                        String.valueOf(player.gamesPlayed()),
+                        player.tierName()
+                ))
+                .toList();
+        return DiscordTableFormatter.render(heading, intro, columns, rows, maxLength);
     }
 
-    private String getGamesWord(int games) {
-        int lastTwoDigits = games % 100;
-        if (lastTwoDigits >= 11 && lastTwoDigits <= 14) {
-            return "игр";
-        }
-
-        return switch (games % 10) {
-            case 1 -> "игра";
-            case 2, 3, 4 -> "игры";
-            default -> "игр";
+    private Color divisionColor(String tierName) {
+        return switch (tierName) {
+            case "S-Tier" -> new Color(255, 193, 7);
+            case "A-Tier" -> new Color(192, 192, 192);
+            case "B-Tier" -> new Color(205, 127, 50);
+            case "C-Tier" -> new Color(108, 117, 125);
+            default -> INFORMATION_COLOR;
         };
+    }
+
+    private record Division(String name, String emoji) {
+
+        private String label() {
+            return (emoji == null || emoji.isBlank() ? "" : emoji + " ") + name;
+        }
     }
 
     private String formatDiscordTimestamp(LocalDateTime dateTime) {

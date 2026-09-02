@@ -93,6 +93,7 @@ public class LeaderboardService {
                 rank,
                 player.getId(),
                 player.getDiscordId(),
+                player.getUsername(),
                 seasonPlayer.getDisplayName(),
                 seasonPlayer.getRating(),
                 seasonPlayer.getGamesPlayed(),

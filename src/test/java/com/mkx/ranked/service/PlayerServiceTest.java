@@ -90,6 +90,9 @@ class PlayerServiceTest {
         assertEquals(List.of(0, 5), result.stream()
                 .map(AdminRegisteredPlayerDto::gamesPlayed)
                 .toList());
+        assertEquals(List.of(1L, 2L), result.stream()
+                .map(AdminRegisteredPlayerDto::seasonPlayerId)
+                .toList());
     }
 
     private SeasonPlayerEntity seasonPlayer(

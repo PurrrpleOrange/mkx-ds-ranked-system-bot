@@ -97,7 +97,7 @@ public class PlayerService {
     private AdminRegisteredPlayerDto toAdminRegisteredPlayerDto(SeasonPlayerEntity seasonPlayer) {
         PlayerEntity player = seasonPlayer.getPlayer();
         return new AdminRegisteredPlayerDto(
-                player.getId(),
+                seasonPlayer.getId(),
                 player.getDiscordId(),
                 player.getUsername(),
                 seasonPlayer.getDisplayName(),

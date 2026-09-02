@@ -1,7 +1,7 @@
 package com.mkx.ranked.model.dto;
 
 public record AdminRegisteredPlayerDto(
-        long playerId,
+        long seasonPlayerId,
         long discordId,
         String discordUsername,
         String displayName,

@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import java.awt.Color;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,7 +47,9 @@ class AdminMessageFormatterTest {
                 1,
                 5,
                 1200,
-                List.of(new LeaderboardEntryDto(1, 1L, 11L, "Sub-Zero", 1200, 5, "Elder God", "🏆"))
+                List.of(new LeaderboardEntryDto(
+                        1, 1L, 11L, "subzero.discord", "Sub-Zero", 1200, 5, "Elder God", "🏆"
+                ))
         );
 
         assertEquals(informationColor, formatter.adminMenu().getColor());
@@ -73,12 +76,14 @@ class AdminMessageFormatterTest {
                 .map(MessageEmbed::getDescription)
                 .reduce("", String::concat);
 
-        assertTrue(rendered.contains("#9"));
-        assertTrue(rendered.contains("ID: `90`"));
+        assertTrue(rendered.contains("ID  №  СТАТУС"));
+        assertTrue(rendered.contains("90"));
+        assertTrue(rendered.contains("9"));
         assertTrue(rendered.contains("ACTIVE"));
         assertTrue(rendered.contains("Season 9"));
-        assertTrue(rendered.contains("ID: `80`"));
+        assertTrue(rendered.contains("80"));
         assertTrue(rendered.contains("FINISHED"));
+        assertTrue(rendered.contains("```text"));
     }
 
     @Test
@@ -92,6 +97,44 @@ class AdminMessageFormatterTest {
         assertTrue(activated.contains("Регистрация выполняется заново"));
         assertTrue(finished.contains("Итоговые места"));
         assertTrue(finished.contains("завершён"));
+    }
+
+    @Test
+    void publishedLeaderboardAndSeasonStatisticsUseAlignedTables() {
+        LeaderboardEntryDto first = new LeaderboardEntryDto(
+                1, 1L, 11L, "subzero.discord", "Sub-Zero", 1400, 10, "S-Tier", "🥇"
+        );
+        LeaderboardEntryDto second = new LeaderboardEntryDto(
+                11, 2L, 22L, "scorpion.discord", "Scorpion", 1300, 8, "A-Tier", "🥈"
+        );
+        List<MessageEmbed> leaderboard = formatter.fullLeaderboard(List.of(first, second));
+        AdminSeasonStatisticsDto statistics = new AdminSeasonStatisticsDto(
+                season(80L, 8, SeasonStatus.FINISHED),
+                1,
+                10,
+                1400,
+                List.of(first)
+        );
+
+        String published = leaderboard.stream()
+                .map(MessageEmbed::getDescription)
+                .reduce("", String::concat);
+        String statisticsDescription = formatter.previousSeasonStatistics(statistics).getDescription();
+
+        assertEquals(2, leaderboard.size());
+        assertTrue(leaderboard.get(0).getTitle().contains("🥇 S-Tier"));
+        assertTrue(leaderboard.get(1).getTitle().contains("🥈 A-Tier"));
+        assertEquals(new Color(255, 193, 7), leaderboard.get(0).getColor());
+        assertEquals(new Color(192, 192, 192), leaderboard.get(1).getColor());
+        assertTrue(published.contains("#  НИК"));
+        assertTrue(published.contains("Sub-Zero"));
+        assertTrue(published.contains("Scorpion"));
+        assertTrue(published.contains("@subzero.discord"));
+        assertTrue(published.contains("@scorpion.discord"));
+        assertTrue(published.contains("```text"));
+        assertTrue(statisticsDescription.contains("**Топ-10 сезона**"));
+        assertTrue(statisticsDescription.contains("#  НИК"));
+        assertTrue(statisticsDescription.contains("```text"));
     }
 
     @Test
@@ -116,14 +159,39 @@ class AdminMessageFormatterTest {
     void registeredPlayerListContainsPlayersWithoutGames() {
         List<String> messages = formatter.registeredPlayers(List.of(
                 new AdminRegisteredPlayerDto(1L, 11L, "discord-one", "Noob", 1000, 0),
-                new AdminRegisteredPlayerDto(2L, 22L, "discord-two", "Veteran", 1250, 8)
+                new AdminRegisteredPlayerDto(22L, 22L, "d2", "Veteran", 1250, 8)
         ));
 
         String rendered = String.join("", messages);
         assertTrue(rendered.contains("Всего: **2**"));
-        assertTrue(rendered.contains("**Noob**"));
-        assertTrue(rendered.contains("0 игр"));
-        assertTrue(rendered.contains("**Veteran**"));
+        assertTrue(rendered.contains("ID  НИК      DISCORD        MMR  ИГРЫ"));
+        assertTrue(rendered.contains(" 1  Noob     @discord-one  1000     0"));
+        assertTrue(rendered.contains("22  Veteran  @d2           1250     8"));
+        assertTrue(rendered.contains("```text"));
+        assertTrue(rendered.endsWith("```"));
+    }
+
+    @Test
+    void registeredPlayerTableDoesNotTruncateValuesAndKeepsCodeBlocksWhenSplit() {
+        String longestName = "VeryLongPlayerNameThatMustRemainComplete";
+        List<AdminRegisteredPlayerDto> players = new ArrayList<>();
+        for (int i = 1; i <= 100; i++) {
+            players.add(new AdminRegisteredPlayerDto(
+                    i,
+                    10_000L + i,
+                    "discord-user-" + i,
+                    i == 100 ? longestName : "Player-" + i,
+                    1000 + i,
+                    i
+            ));
+        }
+
+        List<String> messages = formatter.registeredPlayers(players);
+
+        assertTrue(messages.size() > 1);
+        assertTrue(messages.stream().allMatch(message -> message.contains("```text\n")));
+        assertTrue(messages.stream().allMatch(message -> message.endsWith("```")));
+        assertTrue(String.join("", messages).contains(longestName));
     }
 
     private SeasonDto season(long id, int number, SeasonStatus status) {

@@ -441,8 +441,8 @@ public class AdminCommandListener extends ListenerAdapter {
     }
 
     private void publishLeaderboard(IReplyCallback event) {
-        List<String> chunks = formatter.fullLeaderboard(adminService.getActiveSeasonLeaderboard());
-        replyMessageChunks(event, chunks, false);
+        List<MessageEmbed> embeds = formatter.fullLeaderboard(adminService.getActiveSeasonLeaderboard());
+        replyEmbedList(event, embeds, false);
     }
 
     private void replyMessageChunks(IReplyCallback event, List<String> chunks, boolean ephemeral) {

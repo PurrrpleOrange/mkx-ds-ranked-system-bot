@@ -41,6 +41,10 @@ class LeaderboardServiceTest {
 
         assertEquals(List.of(102L, 101L), result.stream().map(LeaderboardEntryDto::playerId).toList());
         assertEquals(List.of(1, 2), result.stream().map(LeaderboardEntryDto::rank).toList());
+        assertEquals(
+                List.of("player-102", "player-101"),
+                result.stream().map(LeaderboardEntryDto::discordUsername).toList()
+        );
     }
 
     @Test
