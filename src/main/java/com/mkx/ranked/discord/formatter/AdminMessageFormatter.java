@@ -238,7 +238,7 @@ public class AdminMessageFormatter {
     }
 
     public List<String> fullLeaderboard(int seasonNumber, List<LeaderboardEntryDto> players) {
-        String heading = "**Актуальный рейтинг** " + seasonNumber + " сезона";
+        String heading = "\uD83C\uDFC6 **Актуальный рейтинг** " + seasonNumber + " **сезона**";
         if (players.isEmpty()) {
             return List.of(heading + "\n\nТаблица лидеров пока пуста.");
         }
