@@ -6,6 +6,8 @@ services:
       POSTGRES_DB: mkx_ranked
       POSTGRES_USER: mkx
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5433:5432"
     volumes:
       - mkx_postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -19,7 +21,7 @@ services:
     build: .
     container_name: mkx-ranked-bot
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/mkx_ranked
+      DB_URL: ${DB_URL}
       DB_USERNAME: mkx
       DB_PASSWORD: ${DB_PASSWORD}
       DISCORD_TOKEN: ${DISCORD_TOKEN}
