@@ -120,9 +120,9 @@ class AdminMessageFormatterTest {
         String statisticsDescription = formatter.previousSeasonStatistics(statistics).getDescription();
 
         assertEquals(1, leaderboard.size());
-        assertTrue(published.startsWith("**Актуальный рейтинг** 4 сезона"));
-        assertTrue(published.contains("1. *Sub-Zero* - 1400 (10 игр)"));
-        assertTrue(published.contains("2. *Scorpion* - 1300 (8 игр)"));
+        assertTrue(published.startsWith("🏆 **Актуальный рейтинг** 4 **сезона**"));
+        assertTrue(published.contains("1. Sub-Zero - 1400 (10 игр)"));
+        assertTrue(published.contains("2. Scorpion - 1300 (8 игр)"));
         assertTrue(statisticsDescription.contains("**Топ-10 сезона**"));
         assertTrue(statisticsDescription.contains("#  НИК"));
         assertTrue(statisticsDescription.contains("```text"));
