@@ -5,6 +5,7 @@ import com.mkx.ranked.discord.formatter.RankedMessageFormatter;
 import com.mkx.ranked.exception.BusinessException;
 import com.mkx.ranked.model.dto.MatchResult;
 import com.mkx.ranked.service.MatchService;
+import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.slf4j.Logger;
@@ -41,7 +42,6 @@ public class MatchConfirmationListener extends ListenerAdapter {
     @Override
     public void onButtonInteraction(ButtonInteractionEvent event) {
         String componentId = event.getComponentId();
-
         if (componentId.startsWith("confirm_match:")) {
             handleConfirm(event, componentId);
         } else if (componentId.startsWith("reject_match:")) {
@@ -59,9 +59,12 @@ public class MatchConfirmationListener extends ListenerAdapter {
         }
 
         long clickerDiscordId = event.getUser().getIdLong();
-        if (clickerDiscordId != reportedMatch.opponentDiscordId()) {
+        if (clickerDiscordId != reportedMatch.opponentDiscordId()
+                && event.getMember()!= null
+                && !event.getMember().hasPermission(Permission.ADMINISTRATOR)) {
             event.reply("Подтвердить результат может только заявленный соперник <@"
-                            + reportedMatch.opponentDiscordId() + ">.")
+                            + reportedMatch.opponentDiscordId() +
+                            ">., либо администратор")
                     .setEphemeral(true)
                     .queue();
             return;
