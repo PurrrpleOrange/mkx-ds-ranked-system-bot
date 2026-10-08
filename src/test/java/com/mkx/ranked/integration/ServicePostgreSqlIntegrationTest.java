@@ -70,6 +70,38 @@ class ServicePostgreSqlIntegrationTest extends PostgreSqlIntegrationTestSupport 
     PlayerService playerService;
 
     @Test
+    void restoredPlayerReturnsToLeaderboardWithSavedProgressAndCanPlayAgain() {
+        SeasonDto season = createAndActivateSeason("Restoration");
+        register(11L, "Restored");
+        register(22L, "Opponent");
+        matchService.processMatchResult(11L, 22L, 5, 2);
+        var standings = leaderboardService.getFullLeaderboardForActiveSeason();
+        var ownHistory = matchService.getFullMatchHistory(11L);
+        var opponentHistory = matchService.getFullMatchHistory(22L);
+        var profile = playerService.getProfile(11L);
+        var opponentProfile = playerService.getProfile(22L);
+        playerService.removeFromSeason(season.id(), 11L, 999L);
+
+        playerService.restoreToSeason(season.id(), 11L);
+
+        assertEquals(profile, playerService.getProfile(11L));
+        assertEquals(opponentProfile, playerService.getProfile(22L));
+        assertEquals(standings, leaderboardService.getFullLeaderboardForActiveSeason());
+        assertEquals(ownHistory, matchService.getFullMatchHistory(11L));
+        assertEquals(opponentHistory, matchService.getFullMatchHistory(22L));
+        assertEquals(2, playerService.getAllRegisteredPlayersForActiveSeason().size());
+        assertEquals(1, matchRepository.count());
+        assertThrows(BusinessException.class, () -> playerService.restoreToSeason(season.id(), 11L));
+        registrationService.updateCurrentSeasonDisplayName(11L, "Back again");
+        matchService.prepareMatchReport(22L, 11L, 5, 3);
+        matchService.confirmReportedMatch(22L, 11L, 5, 3);
+        assertEquals(2, matchRepository.count());
+        assertEquals(2, playerService.getProfile(11L).gamesPlayed());
+        seasonService.finishActiveSeason();
+        assertNotNull(participation(season.id(), 11L).getFinalRank());
+    }
+
+    @Test
     void removalPreservesMatchesAndOpponentsProgressWhileAllowingStatisticsAndNextSeason() {
         SeasonDto season = createAndActivateSeason("Removal");
         register(11L, "Removed");

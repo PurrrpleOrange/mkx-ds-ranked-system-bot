@@ -43,6 +43,10 @@
 | `admin:select:player_remove:{seasonId}` | предварительный просмотр исключения |
 | `admin:button:player_remove_confirm:{seasonId}:{discordId}` | исключение с сохранением матчей и рейтинга соперников |
 | `admin:button:player_remove_cancel` | отмена исключения |
+| `admin:button:player_restore` | выбор удалённого игрока для восстановления |
+| `admin:select:player_restore:{seasonId}` | предварительный просмотр восстановления |
+| `admin:button:player_restore_confirm:{seasonId}:{discordId}` | восстановление участия с сохранённой статистикой |
+| `admin:button:player_restore_cancel` | отмена восстановления |
 
 Все `admin:*` routes проходят runtime-проверку `ADMINISTRATOR`.
 

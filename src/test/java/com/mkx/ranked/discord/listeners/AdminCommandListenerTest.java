@@ -15,6 +15,8 @@ import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
@@ -33,12 +35,13 @@ import static org.mockito.Mockito.when;
 
 class AdminCommandListenerTest {
 
-    @Test
-    void forgedRemovalButtonCannotBeUsedByNonAdministrator() {
+    @ParameterizedTest
+    @ValueSource(strings = {"remove", "restore"})
+    void membershipButtonsCannotBeUsedByNonAdministrator(String action) {
         AdminService service = mock(AdminService.class);
         var listener = new AdminCommandListener(service, new AdminMessageFormatter(), new DiscordErrorMessageMapper());
         var event = mock(ButtonInteractionEvent.class, RETURNS_DEEP_STUBS);
-        when(event.getComponentId()).thenReturn("admin:button:player_remove_confirm:1:11");
+        when(event.getComponentId()).thenReturn("admin:button:player_" + action + "_confirm:1:11");
         when(event.getMember().hasPermission(Permission.ADMINISTRATOR)).thenReturn(false);
 
         listener.onButtonInteraction(event);
@@ -88,18 +91,66 @@ class AdminCommandListenerTest {
         verify(service, never()).removePlayerFromSeason(anyLong(), anyLong(), anyLong());
     }
 
-    @Test
-    void cancellingRemovalDoesNotCallService() {
+    @ParameterizedTest
+    @ValueSource(strings = {"remove", "restore"})
+    void cancellingMembershipChangeDoesNotCallService(String action) {
         AdminService service = mock(AdminService.class);
         var listener = new AdminCommandListener(service, new AdminMessageFormatter(), new DiscordErrorMessageMapper());
         var event = mock(ButtonInteractionEvent.class, RETURNS_DEEP_STUBS);
-        when(event.getComponentId()).thenReturn("admin:button:player_remove_cancel");
+        when(event.getComponentId()).thenReturn("admin:button:player_" + action + "_cancel");
         when(event.getMember().hasPermission(Permission.ADMINISTRATOR)).thenReturn(true);
 
         listener.onButtonInteraction(event);
 
-        verify(event.editMessage("Удаление игрока отменено.").setEmbeds(List.of())).setComponents(List.of());
+        String message = action.equals("remove") ? "Удаление игрока отменено." : "Восстановление игрока отменено.";
+        verify(event.editMessage(message).setEmbeds(List.of())).setComponents(List.of());
         verifyNoInteractions(service);
+    }
+
+    @Test
+    void confirmedRestorationUsesBoundSeasonAndClearsButtons() {
+        AdminService service = mock(AdminService.class);
+        var listener = new AdminCommandListener(service, new AdminMessageFormatter(), new DiscordErrorMessageMapper());
+        var event = mock(ButtonInteractionEvent.class, RETURNS_DEEP_STUBS);
+        when(event.getComponentId()).thenReturn("admin:button:player_restore_confirm:10:11");
+        when(event.getMember().hasPermission(Permission.ADMINISTRATOR)).thenReturn(true);
+
+        listener.onButtonInteraction(event);
+
+        verify(service).restorePlayerToSeason(10L, 11L);
+        verify(event.editMessage("Игрок <@11> возвращён в сезон. Рейтинг, число игр и история матчей сохранены.")
+                .setEmbeds(List.of())).setComponents(List.of());
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {10L, 20L})
+    void restorationSelectRequiresConfirmationAndRejectsChangedSeason(long currentSeasonId) {
+        AdminService service = mock(AdminService.class);
+        var formatter = new AdminMessageFormatter();
+        var listener = new AdminCommandListener(service, formatter, new DiscordErrorMessageMapper());
+        var event = mock(EntitySelectInteractionEvent.class, RETURNS_DEEP_STUBS);
+        when(event.getComponentId()).thenReturn("admin:select:player_restore:10");
+        when(event.getMember().hasPermission(Permission.ADMINISTRATOR)).thenReturn(true);
+        var user = mock(User.class);
+        when(user.getIdLong()).thenReturn(11L);
+        when(event.getMentions().getUsers()).thenReturn(List.of(user));
+        var season = new SeasonDto(currentSeasonId, 3, "Season", SeasonStatus.ACTIVE, null, null, null);
+        var player = new PlayerProfileDto(1L, 11L, "Scorpion", 1250, 10, null, "Без ранга", "⚪", season,
+                java.time.LocalDateTime.now(), 999L);
+        when(service.getPlayerRestorationPreview(11L)).thenReturn(player);
+
+        listener.onEntitySelectInteraction(event);
+
+        if (currentSeasonId == 10L) {
+            ArgumentCaptor<ActionRow> row = ArgumentCaptor.forClass(ActionRow.class);
+            verify(event.replyEmbeds(formatter.playerRestorationConfirmation(player))).setComponents(row.capture());
+            assertEquals(List.of("admin:button:player_restore_confirm:10:11", "admin:button:player_restore_cancel"),
+                    row.getValue().getComponents().stream().map(component -> ((Button) component).getCustomId()).toList());
+            assertTrue(formatter.playerRestorationConfirmation(player).getDescription().contains("1250"));
+        } else {
+            verify(event).reply("Сезон изменился. Откройте восстановление игрока заново через `/admin`.");
+        }
+        verify(service, never()).restorePlayerToSeason(anyLong(), anyLong());
     }
 
     @Test

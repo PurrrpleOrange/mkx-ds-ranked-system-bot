@@ -76,6 +76,7 @@ public class AdminMessageFormatter {
                         **Вывести всех зарегистрированных игроков** — показать всех участников ACTIVE сезона, включая игроков без матчей.
                         **Посмотреть статистику игрока** — выбрать Discord-пользователя и показать профиль текущего ACTIVE сезона: рейтинг, игры, место и дивизион.
                         **Удалить игрока из сезона** — исключить игрока с подтверждением. Матчи и рейтинг соперников сохраняются.
+                        **Вернуть игрока в сезон** — восстановить удалённого игрока с сохранёнными рейтингом и матчами.
                         """)
                 .build();
     }
@@ -196,6 +197,22 @@ public class AdminMessageFormatter {
                 .addField("Игр", String.valueOf(player.gamesPlayed()), true)
                 .addField("Место", rank, true)
                 .addField("Дивизион", player.tierEmoji() + " " + player.tierName(), true)
+                .build();
+    }
+
+    public MessageEmbed playerRestorationConfirmation(PlayerProfileDto player) {
+        return new EmbedBuilder()
+                .setTitle("Возвращение игрока в сезон")
+                .setColor(Color.GREEN)
+                .setDescription("""
+                        Вернуть **%s** (<@%d>) в сезон **#%d — %s**?
+
+                        **Сохранённый MMR:** %d
+                        **Сыграно игр:** %d
+                        Игрок снова сможет вносить и подтверждать результаты, изменять профиль
+                        и участвовать в рейтинге. Матчи и очки всех игроков сохранятся.
+                        """.formatted(player.displayName(), player.discordId(),
+                        player.season().seasonNumber(), player.season().name(), player.rating(), player.gamesPlayed()))
                 .build();
     }
 

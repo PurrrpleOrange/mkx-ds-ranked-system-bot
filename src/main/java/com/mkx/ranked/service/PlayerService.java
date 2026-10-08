@@ -114,6 +114,21 @@ public class PlayerService {
         findSeasonPlayer(season, findPlayerByDiscordId(discordId)).requireParticipationAllowed();
     }
 
+    @Transactional
+    public void restoreToSeason(long seasonId, long discordId) {
+        SeasonEntity season = seasonService.getActiveSeasonEntityForReadLock();
+        if (!season.getId().equals(seasonId)) {
+            throw new BusinessException("Сезон изменился. Откройте восстановление игрока заново через `/admin`.");
+        }
+        PlayerEntity player = findPlayerByDiscordId(discordId);
+        SeasonPlayerEntity participant = seasonPlayerRepository
+                .findAllBySeasonAndPlayerInForUpdate(season, List.of(player))
+                .stream().findFirst()
+                .orElseThrow(() -> new PlayerNotRegisteredException(discordId));
+        participant.restoreToSeason();
+        seasonPlayerRepository.save(participant);
+    }
+
     private PlayerEntity findPlayerByDiscordId(long discordId) {
         return playerRepository.findByDiscordId(discordId)
                 .orElseThrow(() -> new PlayerNotFoundException(discordId));

@@ -61,6 +61,50 @@ class PlayerRemovalServiceTest {
     }
 
     @Test
+    void restorationPreservesProgressAndAllowsParticipationAndAnotherRemoval() {
+        participant.removeFromSeason(999L);
+        playerService.restoreToSeason(1L, 11L);
+
+        assertFalse(participant.isRemoved());
+        assertNull(participant.getRemovedAt());
+        assertNull(participant.getRemovedBy());
+        assertEquals(1150, participant.getRating());
+        assertEquals(7, participant.getGamesPlayed());
+        assertEquals(850, other.getRating());
+        assertEquals(7, other.getGamesPlayed());
+        assertDoesNotThrow(() -> playerService.requireParticipationAllowed(11L));
+        assertDoesNotThrow(() -> matchService.prepareMatchReport(11L, 22L, 5, 2));
+        assertThrows(BusinessException.class, () -> playerService.restoreToSeason(1L, 11L));
+        verify(participants, times(1)).save(participant);
+        verifyNoInteractions(matches);
+
+        playerService.removeFromSeason(1L, 11L, 888L);
+        assertTrue(participant.isRemoved());
+        assertEquals(888L, participant.getRemovedBy());
+    }
+
+    @Test
+    void restorationRejectsStaleSeasonAndMissingOrActiveParticipant() {
+        assertThrows(BusinessException.class, () -> playerService.restoreToSeason(2L, 11L));
+        verify(participants, never()).findAllBySeasonAndPlayerInForUpdate(any(), any());
+        assertThrows(BusinessException.class, () -> playerService.restoreToSeason(1L, 11L));
+        when(participants.findAllBySeasonAndPlayerInForUpdate(season, List.of(player))).thenReturn(List.of());
+        assertThrows(PlayerNotRegisteredException.class, () -> playerService.restoreToSeason(1L, 11L));
+        verify(participants, never()).save(any());
+    }
+
+    @Test
+    void restorationRequiresActiveSeason() {
+        participant.removeFromSeason(999L);
+        when(seasons.getActiveSeasonEntityForReadLock())
+                .thenThrow(new com.mkx.ranked.exception.SeasonNotActiveException());
+        assertThrows(com.mkx.ranked.exception.SeasonNotActiveException.class,
+                () -> playerService.restoreToSeason(1L, 11L));
+        assertTrue(participant.isRemoved());
+        verify(participants, never()).save(any());
+    }
+
+    @Test
     void removalPreservesProgressAndRecordsAdministratorOnlyOnce() {
         playerService.removeFromSeason(1L, 11L, 999L);
 

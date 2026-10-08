@@ -101,6 +101,14 @@ public class AdminService {
         playerService.removeFromSeason(seasonId, discordId, administratorDiscordId);
     }
 
+    public PlayerProfileDto getPlayerRestorationPreview(long discordId) {
+        return playerService.getProfile(discordId);
+    }
+
+    public void restorePlayerToSeason(long seasonId, long discordId) {
+        playerService.restoreToSeason(seasonId, discordId);
+    }
+
     public List<AdminRegisteredPlayerDto> getAllRegisteredPlayers() {
         return playerService.getAllRegisteredPlayersForActiveSeason();
     }

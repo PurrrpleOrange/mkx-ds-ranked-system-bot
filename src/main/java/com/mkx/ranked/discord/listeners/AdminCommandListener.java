@@ -45,6 +45,8 @@ public class AdminCommandListener extends ListenerAdapter {
     private static final String PLAYER_SELECT_ID = "admin:select:player_info";
     private static final String PLAYER_REMOVE_SELECT_PREFIX = "admin:select:player_remove:";
     private static final String PLAYER_REMOVE_CONFIRM_PREFIX = "admin:button:player_remove_confirm:";
+    private static final String PLAYER_RESTORE_SELECT_PREFIX = "admin:select:player_restore:";
+    private static final String PLAYER_RESTORE_CONFIRM_PREFIX = "admin:button:player_restore_confirm:";
 
     private final AdminService adminService;
     private final AdminMessageFormatter formatter;
@@ -102,7 +104,8 @@ public class AdminCommandListener extends ListenerAdapter {
     @Override
     public void onEntitySelectInteraction(EntitySelectInteractionEvent event) {
         if (!PLAYER_SELECT_ID.equals(event.getComponentId())
-                && !event.getComponentId().startsWith(PLAYER_REMOVE_SELECT_PREFIX)) {
+                && !event.getComponentId().startsWith(PLAYER_REMOVE_SELECT_PREFIX)
+                && !event.getComponentId().startsWith(PLAYER_RESTORE_SELECT_PREFIX)) {
             return;
         }
         if (!ensureAdminAccess(event, event)) {
@@ -112,6 +115,8 @@ public class AdminCommandListener extends ListenerAdapter {
         executeAdminAction(event, "player select", () -> {
             if (event.getComponentId().startsWith(PLAYER_REMOVE_SELECT_PREFIX)) {
                 showPlayerRemovalConfirmation(event);
+            } else if (event.getComponentId().startsWith(PLAYER_RESTORE_SELECT_PREFIX)) {
+                showPlayerRestorationConfirmation(event);
             } else {
                 showSelectedPlayer(event);
             }
@@ -119,6 +124,10 @@ public class AdminCommandListener extends ListenerAdapter {
     }
 
     private void dispatchButton(ButtonInteractionEvent event) {
+        if (event.getComponentId().startsWith(PLAYER_RESTORE_CONFIRM_PREFIX)) {
+            restorePlayer(event);
+            return;
+        }
         if (event.getComponentId().startsWith(PLAYER_REMOVE_CONFIRM_PREFIX)) {
             removePlayer(event);
             return;
@@ -148,6 +157,9 @@ public class AdminCommandListener extends ListenerAdapter {
             case "admin:button:player_info" -> openPlayerSelect(event);
             case "admin:button:player_list" -> showRegisteredPlayers(event);
             case "admin:button:player_remove" -> openPlayerRemovalSelect(event);
+            case "admin:button:player_restore" -> openPlayerRestorationSelect(event);
+            case "admin:button:player_restore_cancel" -> event.editMessage("Восстановление игрока отменено.")
+                    .setEmbeds(List.of()).setComponents(List.of()).queue();
             case "admin:button:player_remove_cancel" -> event.editMessage("Удаление игрока отменено.")
                     .setEmbeds(List.of()).setComponents(List.of()).queue();
             case "admin:button:leaderboard_publish" -> publishLeaderboard(event);
@@ -207,7 +219,8 @@ public class AdminCommandListener extends ListenerAdapter {
         return List.of(ActionRow.of(
                 Button.secondary("admin:button:player_list", "Вывести всех зарегистрированных игроков"),
                 Button.secondary("admin:button:player_info", "Посмотреть статистику игрока"),
-                Button.danger("admin:button:player_remove", "Удалить игрока из сезона")
+                Button.danger("admin:button:player_remove", "Удалить игрока из сезона"),
+                Button.success("admin:button:player_restore", "Вернуть игрока в сезон")
         ));
     }
 
@@ -503,6 +516,52 @@ public class AdminCommandListener extends ListenerAdapter {
         long discordId = parsePositiveLong(ids[1], "Discord ID");
         adminService.removePlayerFromSeason(seasonId, discordId, event.getUser().getIdLong());
         event.editMessage("Игрок <@%d> удалён из сезона. Матчи и рейтинг соперников сохранены."
+                        .formatted(discordId))
+                .setEmbeds(List.of()).setComponents(List.of()).queue();
+    }
+
+    private void openPlayerRestorationSelect(ButtonInteractionEvent event) {
+        SeasonDto season = adminService.getSeasonInfo(null);
+        EntitySelectMenu select = EntitySelectMenu.create(
+                        PLAYER_RESTORE_SELECT_PREFIX + season.id(), EntitySelectMenu.SelectTarget.USER)
+                .setPlaceholder("Выберите удалённого игрока").build();
+        event.reply("Выберите игрока для возвращения в сезон #" + season.seasonNumber() + ".")
+                .setComponents(ActionRow.of(select)).setEphemeral(true).queue();
+    }
+
+    private void showPlayerRestorationConfirmation(EntitySelectInteractionEvent event) {
+        if (event.getMentions().getUsers().isEmpty()) {
+            throw new IllegalArgumentException("Discord-пользователь не выбран.");
+        }
+        long seasonId = parsePositiveLong(
+                event.getComponentId().substring(PLAYER_RESTORE_SELECT_PREFIX.length()), "ID сезона");
+        PlayerProfileDto player = adminService.getPlayerRestorationPreview(
+                event.getMentions().getUsers().get(0).getIdLong());
+        if (player.season().id() != seasonId) {
+            throw new BusinessException("Сезон изменился. Откройте восстановление игрока заново через `/admin`.");
+        }
+        if (!player.removed()) {
+            throw new BusinessException("Игрок уже участвует в текущем сезоне.");
+        }
+        event.replyEmbeds(formatter.playerRestorationConfirmation(player))
+                .setComponents(ActionRow.of(
+                        Button.success(PLAYER_RESTORE_CONFIRM_PREFIX + seasonId + ":" + player.discordId(),
+                                "Подтвердить восстановление"),
+                        Button.secondary("admin:button:player_restore_cancel", "Отмена")))
+                .setEphemeral(true).queue();
+    }
+
+    private void restorePlayer(ButtonInteractionEvent event) {
+        String[] ids = event.getComponentId().substring(PLAYER_RESTORE_CONFIRM_PREFIX.length()).split(":");
+        if (ids.length != 2) {
+            throw new IllegalArgumentException("Кнопка устарела. Откройте `/admin` заново.");
+        }
+        long seasonId = parsePositiveLong(ids[0], "ID сезона");
+        long discordId = parsePositiveLong(ids[1], "Discord ID");
+        adminService.restorePlayerToSeason(seasonId, discordId);
+        log.info("ADMIN ACTION SUCCESS: {} restored player {} to season {}",
+                event.getUser().getIdLong(), discordId, seasonId);
+        event.editMessage("Игрок <@%d> возвращён в сезон. Рейтинг, число игр и история матчей сохранены."
                         .formatted(discordId))
                 .setEmbeds(List.of()).setComponents(List.of()).queue();
     }

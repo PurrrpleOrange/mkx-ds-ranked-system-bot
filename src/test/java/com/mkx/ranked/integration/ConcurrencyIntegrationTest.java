@@ -62,6 +62,30 @@ class ConcurrencyIntegrationTest extends PostgreSqlIntegrationTestSupport {
     PlayerService playerService;
 
     @Test
+    void restorationVersusFinishEitherRestoresFinalRankOrLeavesPlayerExcluded() throws Exception {
+        SeasonDto season = createSeasonWithPlayers(11L, 22L);
+        matchService.processMatchResult(11L, 22L, 5, 2);
+        playerService.removeFromSeason(season.id(), 11L, 999L);
+        RaceResult<Void, SeasonDto> result = race(
+                () -> { playerService.restoreToSeason(season.id(), 11L); return null; },
+                seasonService::finishActiveSeason);
+
+        assertNull(result.second().failure());
+        if (result.first().failure() == null) {
+            assertNull(participation(season.id(), 11L).getRemovedAt());
+            assertEquals(1, participation(season.id(), 11L).getFinalRank());
+            assertEquals(2, participation(season.id(), 22L).getFinalRank());
+        } else {
+            assertInstanceOf(SeasonNotActiveException.class, result.first().failure());
+            assertTrue(participation(season.id(), 11L).isRemoved());
+            assertNull(participation(season.id(), 11L).getFinalRank());
+            assertEquals(1, participation(season.id(), 22L).getFinalRank());
+        }
+        assertParticipantStateMatchesPersistedDeltas(season.id(), 11L, 1);
+        assertParticipantStateMatchesPersistedDeltas(season.id(), 22L, 1);
+    }
+
+    @Test
     void removalVersusMatchEitherPreservesCompletedMatchOrRejectsIt() throws Exception {
         SeasonDto season = createSeasonWithPlayers(11L, 22L);
         RaceResult<Void, MatchResult> result = race(

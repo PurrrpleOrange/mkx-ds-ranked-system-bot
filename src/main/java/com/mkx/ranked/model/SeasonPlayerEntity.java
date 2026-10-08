@@ -1,6 +1,7 @@
 package com.mkx.ranked.model;
 
 import com.mkx.ranked.exception.PlayerRemovedFromSeasonException;
+import com.mkx.ranked.exception.BusinessException;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -107,6 +108,14 @@ public class SeasonPlayerEntity {
         removedAt = LocalDateTime.now();
         removedBy = administratorDiscordId;
         finalRank = null;
+    }
+
+    public void restoreToSeason() {
+        if (!isRemoved()) {
+            throw new BusinessException("Игрок уже участвует в текущем сезоне.");
+        }
+        removedAt = null;
+        removedBy = null;
     }
 
     /**
