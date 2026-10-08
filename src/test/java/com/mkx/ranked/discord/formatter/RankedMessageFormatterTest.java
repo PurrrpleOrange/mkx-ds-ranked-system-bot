@@ -23,11 +23,28 @@ class RankedMessageFormatterTest {
     private final RankedMessageFormatter formatter = new RankedMessageFormatter();
 
     @Test
+    void removedPlayerSeesAdministratorMentionRestrictionsAndSavedStatistics() {
+        SeasonDto season = new SeasonDto(90L, 9, "Season 9", SeasonStatus.ACTIVE, null, null, null);
+        PlayerProfileDto profile = new PlayerProfileDto(1L, 11L, "Scorpion", 1250, 12, null,
+                "Без ранга", "⚪", season, LocalDateTime.of(2026, 10, 1, 12, 0), 987654321L);
+
+        String text = formatter.rankedMenu(profile).getDescription();
+
+        assertTrue(text.contains("Вы были удалены из текущего сезона пользователем <@987654321>."));
+        assertTrue(text.contains("Вы больше не можете участвовать в текущем сезоне"));
+        assertTrue(text.contains("Просмотр профиля, рейтинга и истории матчей остаётся доступен."));
+        assertTrue(text.contains("**Сохранённый MMR:** 1250"));
+        assertTrue(text.contains("**Сыграно игр:** 12"));
+        assertTrue(text.contains("01.10.2026 12:00"));
+        assertFalse(text.contains("Место в топе:"));
+    }
+
+    @Test
     void usesTurquoiseForInformationGreenForConfirmedAndRedForRejected() {
         Color informationColor = new Color(0, 255, 200);
         SeasonDto season = new SeasonDto(90L, 9, "Season 9", SeasonStatus.ACTIVE, null, null, null);
         PlayerProfileDto profile = new PlayerProfileDto(
-                1L, 11L, "Sub-Zero", 1200, 5, 1, "Elder God", "🏆", season
+                1L, 11L, "Sub-Zero", 1200, 5, 1, "Elder God", "🏆", season, null, null
         );
         RegistrationResultDto registration = new RegistrationResultDto(
                 1L, 11L, "discord", "Sub-Zero", 90L, 9, 1000, 0
@@ -58,7 +75,7 @@ class RankedMessageFormatterTest {
                 null
         );
         PlayerProfileDto profile = new PlayerProfileDto(
-                1L, 11L, "Sub-Zero", 999, 3, 10, "S-Tier", "🥇", season
+                1L, 11L, "Sub-Zero", 999, 3, 10, "S-Tier", "🥇", season, null, null
         );
 
         var embed = formatter.rankedMenu(profile);

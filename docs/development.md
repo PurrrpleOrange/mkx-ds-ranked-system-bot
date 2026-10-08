@@ -38,6 +38,21 @@ docker compose ps
 ```
 
 
+## Отдельная база для ветки main
+
+Если существующая локальная база уже использовалась веткой разработки с другими миграциями V4–V9,
+для main и основанных на ней веток используйте отдельный контейнер и volume:
+
+```powershell
+docker compose -f docker-compose.main.yml up -d --wait
+```
+
+Контейнер `mkx-ranked-postgres-main` доступен на `127.0.0.1:5434`, база — `mkx_ranked`,
+пользователь — `mkx`, пароль берётся из `DB_PASSWORD` в `.env`. Исходный контейнер и его данные сохраняются.
+В конфигурации запуска приложения (в том числе в IntelliJ IDEA) задайте
+`DB_URL=jdbc:postgresql://localhost:5434/mkx_ranked`. Остальные переменные подключения остаются прежними.
+При первом запуске Flyway применит миграции этой ветки V1–V4 к новой базе.
+
 ## Запуск приложения
 
 В PowerShell:
@@ -77,9 +92,9 @@ mvn test
 - `service/*Test` — unit-тесты lifecycle, регистрации, профиля, leaderboard, истории, Elo, матчей и административного фасада на Mockito;
 - `discord/listeners` — маршрутизация пользовательских interactions и отсутствие repository dependency у admin listener;
 - `discord/formatter` — содержимое, цвета, таблицы и разбиение длинных сообщений;
-- `integration/PostgreSqlSchemaIntegrationTest` — Flyway V1–V3, Hibernate validation и ключевые PostgreSQL constraints;
+- `integration/PostgreSqlSchemaIntegrationTest` — Flyway V1–V4, Hibernate validation и ключевые PostgreSQL constraints;
 - `integration/ServicePostgreSqlIntegrationTest` — сквозное поведение сервисов на PostgreSQL;
-- `integration/ConcurrencyIntegrationTest` — конкурентные матчи, lifecycle, регистрация и rollback.
+- `integration/ConcurrencyIntegrationTest` — конкурентные матчи, lifecycle, регистрация, rollback и исключение игроков.
 
 Интеграционный base class запускает `postgres:16-alpine` через Testcontainers и динамически передаёт datasource properties Spring Boot. JDA заменяется mock bean, поэтому настоящий Discord token не нужен. Docker должен быть доступен текущему пользователю; без него полный `mvn test` завершится ошибкой запуска контейнера.
 
@@ -87,7 +102,7 @@ mvn test
 
 Миграции находятся в `src/main/resources/db/migration/` и применяются по версии. Для изменения схемы:
 
-1. не редактируйте уже применённые `V1`, `V2`, `V3`;
+1. не редактируйте уже применённые миграции;
 2. добавьте новую migration с очередной версией и осмысленным именем;
 3. синхронизируйте JPA mapping с итоговой схемой;
 4. дополните schema integration tests;

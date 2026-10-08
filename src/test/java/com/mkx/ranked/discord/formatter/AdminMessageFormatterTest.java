@@ -40,7 +40,7 @@ class AdminMessageFormatterTest {
                 LocalDateTime.of(2026, 9, 1, 10, 0)
         );
         AdminPlayerDto player = new AdminPlayerDto(
-                1L, 11L, "discord", "Sub-Zero", 1200, 5, 1, "Elder God", "🏆", 9
+                1L, 11L, "discord", "Sub-Zero", 1200, 5, 1, "Elder God", "🏆", 9, null
         );
         AdminSeasonStatisticsDto statistics = new AdminSeasonStatisticsDto(
                 season,

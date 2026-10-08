@@ -37,8 +37,12 @@
 | `admin:button:season_statistics` / `admin:modal:season_statistics` | статистика завершённого сезона |
 | `admin:button:season_update` / `admin:modal:season_update` | изменение активного сезона |
 | `admin:button:match_delete` / `admin:modal:match_delete` | rollback и удаление матча |
-| `admin:button:player_list` | все участия активного сезона |
+| `admin:button:player_list` | неисключённые участники активного сезона |
 | `admin:button:player_info` / `admin:select:player_info` | профиль выбранного игрока |
+| `admin:button:player_remove` | выбор игрока для исключения |
+| `admin:select:player_remove:{seasonId}` | предварительный просмотр исключения |
+| `admin:button:player_remove_confirm:{seasonId}:{discordId}` | исключение с сохранением матчей и рейтинга соперников |
+| `admin:button:player_remove_cancel` | отмена исключения |
 
 Все `admin:*` routes проходят runtime-проверку `ADMINISTRATOR`.
 

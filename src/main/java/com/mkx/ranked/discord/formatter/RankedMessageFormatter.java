@@ -32,7 +32,7 @@ public class RankedMessageFormatter {
 
     public MessageEmbed rankedMenu(PlayerProfileDto profile) {
         EmbedBuilder embed = new EmbedBuilder();
-        String rank = profile.rank() == null ? "Без ранга" : "#" + profile.rank();
+        String rank = profile.removed() ? "Не участвует" : profile.rank() == null ? "Без ранга" : "#" + profile.rank();
         embed.setTitle("Mortal Kombat X - " + profile.season().name());
         embed.setColor(INFORMATION_COLOR);
         embed.setDescription("""
@@ -56,6 +56,24 @@ public class RankedMessageFormatter {
                 formatDate(profile.season().startDate()),
                 formatDate(profile.season().plannedEndDate())
         ));
+        if (profile.removed()) {
+            embed.setColor(Color.ORANGE);
+            embed.setDescription("""
+                    Вы были удалены из текущего сезона пользователем <@%d>.
+                    Вы больше не можете участвовать в текущем сезоне: вносить и подтверждать результаты
+                    матчей или регистрироваться повторно. В следующем сезоне можно зарегистрироваться заново.
+                    Просмотр профиля, рейтинга и истории матчей остаётся доступен.
+
+                    **Сезон:** #%d — %s
+                    **Игрок:** %s
+                    **Сохранённый MMR:** %d
+                    **Сыграно игр:** %d
+                    **Дата удаления:** %s
+                    Матчи и очки рейтинга соперников сохранены.
+                    """.formatted(profile.removedBy(), profile.season().seasonNumber(), profile.season().name(),
+                    profile.displayName(), profile.rating(), profile.gamesPlayed(),
+                    TABLE_DATE_TIME_FORMAT.format(profile.removedAt())));
+        }
         return embed.build();
     }
 

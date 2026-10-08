@@ -1,0 +1,23 @@
+name: mkx-ranked-main
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: mkx-ranked-postgres-main
+    environment:
+      POSTGRES_DB: mkx_ranked
+      POSTGRES_USER: mkx
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - mkx_main_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mkx -d mkx_ranked"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mkx_main_postgres_data:

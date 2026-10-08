@@ -14,6 +14,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -96,7 +97,8 @@ class RegistrationServiceTest {
     void samePlayerCannotRegisterTwiceInSameSeason() {
         PlayerEntity existingPlayer = player(1L, 100L, "discord-user");
         when(playerRepository.findByDiscordId(100L)).thenReturn(Optional.of(existingPlayer));
-        when(seasonPlayerRepository.existsBySeasonAndPlayer(activeSeason, existingPlayer)).thenReturn(true);
+        when(seasonPlayerRepository.findBySeasonAndPlayer(activeSeason, existingPlayer))
+                .thenReturn(Optional.of(new SeasonPlayerEntity(existingPlayer, activeSeason, "Sub-Zero")));
 
         BusinessException exception = assertThrows(
                 BusinessException.class,
@@ -230,8 +232,8 @@ class RegistrationServiceTest {
         participation.setRating(1275);
         participation.setGamesPlayed(12);
         when(playerRepository.findByDiscordId(100L)).thenReturn(Optional.of(existingPlayer));
-        when(seasonPlayerRepository.findBySeasonAndPlayer(activeSeason, existingPlayer))
-                .thenReturn(Optional.of(participation));
+        when(seasonPlayerRepository.findAllBySeasonAndPlayerInForUpdate(activeSeason, List.of(existingPlayer)))
+                .thenReturn(List.of(participation));
         when(seasonPlayerRepository.saveAndFlush(participation)).thenReturn(participation);
 
         RegistrationResultDto result = service.updateCurrentSeasonDisplayName(100L, "  New Name  ");
@@ -253,8 +255,8 @@ class RegistrationServiceTest {
                 "Old Name"
         );
         when(playerRepository.findByDiscordId(100L)).thenReturn(Optional.of(existingPlayer));
-        when(seasonPlayerRepository.findBySeasonAndPlayer(activeSeason, existingPlayer))
-                .thenReturn(Optional.of(participation));
+        when(seasonPlayerRepository.findAllBySeasonAndPlayerInForUpdate(activeSeason, List.of(existingPlayer)))
+                .thenReturn(List.of(participation));
         when(seasonPlayerRepository.existsBySeasonAndDisplayNameIgnoreCase(activeSeason, "Taken Name"))
                 .thenReturn(true);
 

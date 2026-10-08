@@ -15,6 +15,8 @@ import com.mkx.ranked.repository.SeasonRepository;
 import com.mkx.ranked.service.MatchService;
 import com.mkx.ranked.service.RegistrationService;
 import com.mkx.ranked.service.SeasonService;
+import com.mkx.ranked.service.PlayerService;
+import com.mkx.ranked.exception.PlayerRemovedFromSeasonException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -55,6 +57,61 @@ class ConcurrencyIntegrationTest extends PostgreSqlIntegrationTestSupport {
 
     @Autowired
     MatchRepository matchRepository;
+
+    @Autowired
+    PlayerService playerService;
+
+    @Test
+    void removalVersusMatchEitherPreservesCompletedMatchOrRejectsIt() throws Exception {
+        SeasonDto season = createSeasonWithPlayers(11L, 22L);
+        RaceResult<Void, MatchResult> result = race(
+                () -> { playerService.removeFromSeason(season.id(), 11L, 999L); return null; },
+                () -> matchService.confirmReportedMatch(11L, 22L, 5, 2));
+
+        assertNull(result.first().failure());
+        assertTrue(participation(season.id(), 11L).isRemoved());
+        int games = result.second().failure() == null ? 1 : 0;
+        if (result.second().failure() != null) {
+            assertInstanceOf(PlayerRemovedFromSeasonException.class, result.second().failure());
+        }
+        assertEquals(games, matchRepository.count());
+        assertParticipantStateMatchesPersistedDeltas(season.id(), 11L, games);
+        assertParticipantStateMatchesPersistedDeltas(season.id(), 22L, games);
+    }
+
+    @Test
+    void concurrentRemovalsPreserveFirstAdministrator() throws Exception {
+        SeasonDto season = createSeasonWithPlayers(11L);
+        RaceResult<Long, Long> result = race(
+                () -> { playerService.removeFromSeason(season.id(), 11L, 999L); return 999L; },
+                () -> { playerService.removeFromSeason(season.id(), 11L, 888L); return 888L; });
+        var success = result.first().failure() == null ? result.first() : result.second();
+        var failure = result.first().failure() == null ? result.second() : result.first();
+        assertNull(success.failure());
+        assertInstanceOf(PlayerRemovedFromSeasonException.class, failure.failure());
+        assertEquals(success.value(), participation(season.id(), 11L).getRemovedBy());
+    }
+
+    @Test
+    void removalVersusFinishCannotChangeFinishedStandings() throws Exception {
+        SeasonDto season = createSeasonWithPlayers(11L, 22L);
+        matchService.processMatchResult(11L, 22L, 5, 2);
+        RaceResult<Void, SeasonDto> result = race(
+                () -> { playerService.removeFromSeason(season.id(), 11L, 999L); return null; },
+                seasonService::finishActiveSeason);
+        assertNull(result.second().failure());
+        if (result.first().failure() == null) {
+            assertTrue(participation(season.id(), 11L).isRemoved());
+            assertNull(participation(season.id(), 11L).getFinalRank());
+            assertEquals(1, participation(season.id(), 22L).getFinalRank());
+        } else {
+            assertInstanceOf(SeasonNotActiveException.class, result.first().failure());
+            assertNull(participation(season.id(), 11L).getRemovedAt());
+            assertEquals(1, participation(season.id(), 11L).getFinalRank());
+            assertEquals(2, participation(season.id(), 22L).getFinalRank());
+        }
+        assertEquals(1, matchRepository.count());
+    }
 
     @Test
     void concurrentMatchesSharingPlayerHaveNoLostUpdate() throws Exception {

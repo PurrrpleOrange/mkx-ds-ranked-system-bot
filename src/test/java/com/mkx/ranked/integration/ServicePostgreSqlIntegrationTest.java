@@ -4,6 +4,7 @@ import com.mkx.ranked.exception.BusinessException;
 import com.mkx.ranked.exception.InvalidMatchException;
 import com.mkx.ranked.exception.MatchNotFoundException;
 import com.mkx.ranked.exception.SeasonNotActiveException;
+import com.mkx.ranked.exception.PlayerRemovedFromSeasonException;
 import com.mkx.ranked.model.MatchEntity;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
@@ -24,6 +25,7 @@ import com.mkx.ranked.service.MatchService;
 import com.mkx.ranked.service.RegistrationService;
 import com.mkx.ranked.service.SeasonHistoryService;
 import com.mkx.ranked.service.SeasonService;
+import com.mkx.ranked.service.PlayerService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -63,6 +65,75 @@ class ServicePostgreSqlIntegrationTest extends PostgreSqlIntegrationTestSupport 
 
     @Autowired
     MatchRepository matchRepository;
+
+    @Autowired
+    PlayerService playerService;
+
+    @Test
+    void removalPreservesMatchesAndOpponentsProgressWhileAllowingStatisticsAndNextSeason() {
+        SeasonDto season = createAndActivateSeason("Removal");
+        register(11L, "Removed");
+        register(22L, "Opponent one");
+        register(33L, "Opponent two");
+        MatchResult win = matchService.processMatchResult(11L, 22L, 5, 2);
+        matchService.processMatchResult(33L, 11L, 5, 3);
+        var ownHistory = matchService.getFullMatchHistory(11L);
+        var firstHistory = matchService.getFullMatchHistory(22L);
+        var secondHistory = matchService.getFullMatchHistory(33L);
+        int firstRating = participation(season.id(), 22L).getRating();
+        int secondRating = participation(season.id(), 33L).getRating();
+        int removedRating = participation(season.id(), 11L).getRating();
+
+        playerService.removeFromSeason(season.id(), 11L, 999L);
+
+        assertEquals(2, matchRepository.count());
+        assertEquals(ownHistory, matchService.getFullMatchHistory(11L));
+        assertEquals(firstHistory, matchService.getFullMatchHistory(22L));
+        assertEquals(secondHistory, matchService.getFullMatchHistory(33L));
+        assertEquals(firstRating, participation(season.id(), 22L).getRating());
+        assertEquals(secondRating, participation(season.id(), 33L).getRating());
+        assertEquals(1, participation(season.id(), 22L).getGamesPlayed());
+        assertEquals(1, participation(season.id(), 33L).getGamesPlayed());
+        var profile = playerService.getProfile(11L);
+        assertTrue(profile.removed());
+        assertEquals(999L, profile.removedBy());
+        assertEquals(removedRating, profile.rating());
+        assertEquals(2, profile.gamesPlayed());
+        assertNull(profile.rank());
+        assertTrue(registrationService.isRegistered(11L));
+        assertEquals(List.of(33L, 22L), leaderboardService.getFullLeaderboardForActiveSeason().stream()
+                .map(LeaderboardEntryDto::discordId).toList());
+        var active = seasonRepository.findById(season.id()).orElseThrow();
+        assertEquals(2, seasonPlayerRepository.findLeaderboardBySeason(active,
+                org.springframework.data.domain.PageRequest.of(0, 1)).getTotalElements());
+        assertEquals(2, seasonPlayerRepository.countBySeason(active));
+        assertEquals(2, playerService.getAllRegisteredPlayersForActiveSeason().size());
+        assertThrows(PlayerRemovedFromSeasonException.class,
+                () -> registrationService.register(11L, "discord-11", "New name"));
+        assertThrows(PlayerRemovedFromSeasonException.class,
+                () -> matchService.confirmReportedMatch(22L, 11L, 5, 2));
+        assertThrows(PlayerRemovedFromSeasonException.class,
+                () -> playerService.removeFromSeason(season.id(), 11L, 888L));
+        assertEquals(999L, participation(season.id(), 11L).getRemovedBy());
+
+        // Explicit match rollback remains a separate admin action and can still use the archived participant.
+        matchService.revertMatch(win.matchId());
+        assertEquals(1000, participation(season.id(), 22L).getRating());
+        assertEquals(0, participation(season.id(), 22L).getGamesPlayed());
+        seasonService.finishActiveSeason();
+        assertNull(participation(season.id(), 11L).getFinalRank());
+        assertEquals(1, participation(season.id(), 33L).getFinalRank());
+        assertEquals(List.of(33L), leaderboardService.getLeaderboardForSeason(season.id()).stream()
+                .map(LeaderboardEntryDto::discordId).toList());
+
+        SeasonDto next = createAndActivateSeason("Next");
+        register(11L, "Removed");
+        assertEquals(1000, playerService.getProfile(11L).rating());
+        assertNull(playerService.getProfile(11L).removedBy());
+        assertThrows(BusinessException.class, () -> playerService.removeFromSeason(season.id(), 11L, 999L));
+        assertNull(participation(next.id(), 11L).getRemovedAt());
+        assertEquals(999L, participation(season.id(), 11L).getRemovedBy());
+    }
 
     @Test
     void registrationLifecycleUsesSeasonScopedIdentityAndPreservesFinishedSnapshot() {

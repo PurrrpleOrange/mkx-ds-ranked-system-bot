@@ -6,6 +6,7 @@ import com.mkx.ranked.model.dto.AdminRegisteredPlayerDto;
 import com.mkx.ranked.model.dto.AdminSeasonStatisticsDto;
 import com.mkx.ranked.model.dto.LeaderboardEntryDto;
 import com.mkx.ranked.model.dto.SeasonDto;
+import com.mkx.ranked.model.dto.PlayerProfileDto;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -90,6 +91,14 @@ public class AdminService {
 
     public AdminPlayerDto getPlayerInfo(long discordId) {
         return playerService.getAdminPlayerInfo(discordId);
+    }
+
+    public PlayerProfileDto getPlayerRemovalPreview(long discordId) {
+        return playerService.getProfile(discordId);
+    }
+
+    public void removePlayerFromSeason(long seasonId, long discordId, long administratorDiscordId) {
+        playerService.removeFromSeason(seasonId, discordId, administratorDiscordId);
     }
 
     public List<AdminRegisteredPlayerDto> getAllRegisteredPlayers() {

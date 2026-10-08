@@ -5,6 +5,14 @@ import com.mkx.ranked.discord.formatter.RankedMessageFormatter;
 import com.mkx.ranked.exception.BusinessException;
 import com.mkx.ranked.exception.PlayerNotRegisteredException;
 import com.mkx.ranked.model.dto.MatchHistoryEntryDto;
+import com.mkx.ranked.model.dto.PlayerProfileDto;
+import com.mkx.ranked.model.dto.SeasonDto;
+import com.mkx.ranked.model.enums.SeasonStatus;
+import com.mkx.ranked.exception.PlayerRemovedFromSeasonException;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import org.mockito.ArgumentCaptor;
 import com.mkx.ranked.service.LeaderboardService;
 import com.mkx.ranked.service.MatchService;
 import com.mkx.ranked.service.PlayerService;
@@ -17,6 +25,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.time.LocalDateTime;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -25,6 +36,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 
 class RankedCommandListenerTest {
 
@@ -52,6 +64,44 @@ class RankedCommandListenerTest {
                 formatter,
                 errorMessageMapper
         );
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void removedUserGetsNoticeAndOnlyStatisticsButtonsFromRanked() {
+        SlashCommandInteractionEvent event = mock(SlashCommandInteractionEvent.class, RETURNS_DEEP_STUBS);
+        when(event.getName()).thenReturn("ranked");
+        when(event.getUser().getIdLong()).thenReturn(11L);
+        when(registrationService.isRegistered(11L)).thenReturn(true);
+        var season = new SeasonDto(1L, 1, "Season", SeasonStatus.ACTIVE, null, null, null);
+        var profile = new PlayerProfileDto(1L, 11L, "Scorpion", 1100, 5, null, "Без ранга", "⚪",
+                season, LocalDateTime.now(), 999L);
+        when(playerService.getProfile(11L)).thenReturn(profile);
+        var embed = new RankedMessageFormatter().rankedMenu(profile);
+        when(formatter.rankedMenu(profile)).thenReturn(embed);
+
+        listener.onSlashCommandInteraction(event);
+
+        ArgumentCaptor<List<ActionRow>> rows = ArgumentCaptor.forClass(List.class);
+        verify(event.replyEmbeds(embed)).setComponents(rows.capture());
+        assertEquals(List.of("btn:match_history", "btn:leaderboard"), rows.getValue().stream()
+                .flatMap(row -> row.getComponents().stream()).map(component -> ((Button) component).getCustomId())
+                .toList());
+        verify(event, never()).replyModal(any(Modal.class));
+    }
+
+    @Test
+    void staleReportButtonCannotStartMatchForRemovedUser() {
+        var event = buttonEvent("btn:report_match");
+        when(event.getUser().getIdLong()).thenReturn(11L);
+        var error = new PlayerRemovedFromSeasonException(11L, 999L);
+        doThrow(error).when(playerService).requireParticipationAllowed(11L);
+        when(errorMessageMapper.toUserMessage(error)).thenReturn(error.getMessage());
+
+        listener.onButtonInteraction(event);
+
+        verify(event).reply(error.getMessage());
+        verify(event, never()).reply("С кем был сыгран матч?");
     }
 
     @Test

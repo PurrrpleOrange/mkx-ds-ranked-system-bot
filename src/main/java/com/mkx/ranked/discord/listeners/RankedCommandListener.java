@@ -150,6 +150,10 @@ public class RankedCommandListener extends ListenerAdapter {
         }
 
         User opponent = event.getMentions().getUsers().get(0);
+        if (!ensureParticipationAllowed(event, event.getUser().getIdLong())
+                || !ensureParticipationAllowed(event, opponent.getIdLong())) {
+            return;
+        }
 
         TextInput myScoreInput = TextInput.create("my_score_input", TextInputStyle.SHORT)
                 .setPlaceholder("Например: 5")
@@ -192,7 +196,7 @@ public class RankedCommandListener extends ListenerAdapter {
             PlayerProfileDto profile = playerService.getProfile(event.getUser().getIdLong());
 
             event.replyEmbeds(formatter.rankedMenu(profile))
-                    .setComponents(rankedMenuRows())
+                    .setComponents(rankedMenuRows(profile))
                     .setEphemeral(true)
                     .queue();
         } catch (BusinessException e) {
@@ -299,6 +303,9 @@ public class RankedCommandListener extends ListenerAdapter {
     }
 
     private void handleReportMatchButton(ButtonInteractionEvent event) {
+        if (!ensureParticipationAllowed(event, event.getUser().getIdLong())) {
+            return;
+        }
         EntitySelectMenu opponentSelect =
                 EntitySelectMenu.create("select:opponent_report", EntitySelectMenu.SelectTarget.USER)
                         .setPlaceholder("Выберите соперника")
@@ -310,8 +317,22 @@ public class RankedCommandListener extends ListenerAdapter {
                 .queue();
     }
 
+    private boolean ensureParticipationAllowed(IReplyCallback event, long discordId) {
+        try {
+            playerService.requireParticipationAllowed(discordId);
+            return true;
+        } catch (BusinessException e) {
+            event.reply(errorMessageMapper.toUserMessage(e)).setEphemeral(true).queue();
+        } catch (Exception e) {
+            log.error("INTERACTION ERROR: failed to check participation for {}", discordId, e);
+            event.reply(errorMessageMapper.internalError()).setEphemeral(true).queue();
+        }
+        return false;
+    }
+
     private void openProfileEditModal(ButtonInteractionEvent event) {
         try {
+            playerService.requireParticipationAllowed(event.getUser().getIdLong());
             PlayerProfileDto profile = playerService.getProfile(event.getUser().getIdLong());
             String currentDisplayName = profile.displayName();
             String initialValue = currentDisplayName.substring(
@@ -351,7 +372,7 @@ public class RankedCommandListener extends ListenerAdapter {
             );
             PlayerProfileDto profile = playerService.getProfile(discordId);
             event.replyEmbeds(formatter.rankedMenu(profile))
-                    .setComponents(rankedMenuRows())
+                    .setComponents(rankedMenuRows(profile))
                     .setEphemeral(true)
                     .queue();
         } catch (BusinessException e) {
@@ -362,7 +383,13 @@ public class RankedCommandListener extends ListenerAdapter {
         }
     }
 
-    private List<ActionRow> rankedMenuRows() {
+    private List<ActionRow> rankedMenuRows(PlayerProfileDto profile) {
+        if (profile.removed()) {
+            return List.of(ActionRow.of(
+                    Button.secondary("btn:match_history", "История матчей"),
+                    Button.secondary("btn:leaderboard", "Топ игроков")
+            ));
+        }
         return List.of(ActionRow.of(
                 Button.primary("btn:report_match", "Внести результат"),
                 Button.secondary("btn:match_history", "История матчей"),

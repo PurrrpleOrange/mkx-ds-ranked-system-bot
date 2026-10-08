@@ -1,6 +1,7 @@
 package com.mkx.ranked.service;
 
 import com.mkx.ranked.exception.PlayerNotFoundException;
+import com.mkx.ranked.exception.BusinessException;
 import com.mkx.ranked.exception.PlayerNotRegisteredException;
 import com.mkx.ranked.model.PlayerEntity;
 import com.mkx.ranked.model.SeasonEntity;
@@ -54,7 +55,9 @@ public class PlayerService {
                 rank,
                 tier == null ? UNRANKED_TIER_NAME : tier.getName(),
                 tier == null ? UNRANKED_TIER_EMOJI : tier.getEmoji(),
-                seasonService.toDto(season)
+                seasonService.toDto(season),
+                seasonPlayer.getRemovedAt(),
+                seasonPlayer.getRemovedBy()
         );
     }
 
@@ -76,7 +79,8 @@ public class PlayerService {
                 rank,
                 tier == null ? UNRANKED_TIER_NAME : tier.getName(),
                 tier == null ? UNRANKED_TIER_EMOJI : tier.getEmoji(),
-                season.getSeasonNumber()
+                season.getSeasonNumber(),
+                seasonPlayer.getRemovedBy()
         );
     }
 
@@ -87,6 +91,27 @@ public class PlayerService {
                 .stream()
                 .map(this::toAdminRegisteredPlayerDto)
                 .toList();
+    }
+
+    @Transactional
+    public void removeFromSeason(long seasonId, long discordId, long administratorDiscordId) {
+        SeasonEntity season = seasonService.getActiveSeasonEntityForReadLock();
+        if (!season.getId().equals(seasonId)) {
+            throw new BusinessException("Сезон изменился. Откройте удаление игрока заново через `/admin`.");
+        }
+        PlayerEntity player = findPlayerByDiscordId(discordId);
+        SeasonPlayerEntity participant = seasonPlayerRepository
+                .findAllBySeasonAndPlayerInForUpdate(season, List.of(player))
+                .stream().findFirst()
+                .orElseThrow(() -> new PlayerNotRegisteredException(discordId));
+        participant.removeFromSeason(administratorDiscordId);
+        seasonPlayerRepository.save(participant);
+    }
+
+    @Transactional(readOnly = true)
+    public void requireParticipationAllowed(long discordId) {
+        SeasonEntity season = seasonService.getActiveSeasonEntity();
+        findSeasonPlayer(season, findPlayerByDiscordId(discordId)).requireParticipationAllowed();
     }
 
     private PlayerEntity findPlayerByDiscordId(long discordId) {
@@ -112,7 +137,7 @@ public class PlayerService {
     }
 
     private Integer calculateRank(SeasonEntity season, SeasonPlayerEntity seasonPlayer) {
-        if (seasonPlayer.getGamesPlayed() == 0) {
+        if (seasonPlayer.isRemoved() || seasonPlayer.getGamesPlayed() == 0) {
             return null;
         }
         List<SeasonPlayerEntity> standings = seasonPlayerRepository.findLeaderboardBySeason(season);

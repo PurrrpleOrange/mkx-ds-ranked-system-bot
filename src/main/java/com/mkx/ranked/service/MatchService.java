@@ -64,6 +64,8 @@ public class MatchService {
         SeasonEntity season = seasonService.getCurrentSeasonEntity();
         SeasonPlayerEntity reporterSeasonPlayer = findSeasonPlayer(season, reporter);
         SeasonPlayerEntity opponentSeasonPlayer = findSeasonPlayer(season, opponent);
+        reporterSeasonPlayer.requireParticipationAllowed();
+        opponentSeasonPlayer.requireParticipationAllowed();
 
         return new MatchReportPreviewDto(
                 reporterDiscordId,
@@ -106,6 +108,8 @@ public class MatchService {
         LockedParticipants participants = findSeasonPlayersForUpdate(season, winnerPlayer, loserPlayer);
         SeasonPlayerEntity winner = participants.get(winnerPlayer);
         SeasonPlayerEntity loser = participants.get(loserPlayer);
+        winner.requireParticipationAllowed();
+        loser.requireParticipationAllowed();
 
         validateSameSeason(season, winner, loser);
 

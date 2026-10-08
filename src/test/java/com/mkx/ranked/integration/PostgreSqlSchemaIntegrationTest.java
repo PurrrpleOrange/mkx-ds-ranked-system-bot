@@ -23,11 +23,11 @@ class PostgreSqlSchemaIntegrationTest extends PostgreSqlIntegrationTestSupport {
                 String.class
         );
 
-        assertEquals(List.of("1", "2", "3"), versions);
+        assertEquals(List.of("1", "2", "3", "4"), versions);
         assertTrue(entityManagerFactory.isOpen());
         assertEquals(1L, jdbcTemplate.queryForObject("SELECT nextval('season_number_seq')", Long.class));
         assertEquals(
-                List.of("display_name", "final_rank", "games_played", "id", "player_id", "rating", "season_id"),
+                List.of("display_name", "final_rank", "games_played", "id", "player_id", "rating", "removed_at", "removed_by", "season_id"),
                 jdbcTemplate.queryForList(
                         """
                         SELECT column_name
@@ -112,6 +112,23 @@ class PostgreSqlSchemaIntegrationTest extends PostgreSqlIntegrationTestSupport {
         assertEquals(2, jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM season_players WHERE lower(display_name) = 'scorpion'", Integer.class
         ));
+    }
+
+    @Test
+    void removalMetadataMustBeCompleteAndAdministratorNeedNotBeRegistered() {
+        insertSeasonAndPlayerFixture();
+        jdbcTemplate.update("""
+                INSERT INTO season_players(id, season_id, player_id, display_name, rating, games_played)
+                VALUES (10, 1, 1, 'Scorpion', 1000, 0)
+                """);
+        assertThrows(DataIntegrityViolationException.class,
+                () -> jdbcTemplate.update("UPDATE season_players SET removed_at = CURRENT_TIMESTAMP WHERE id = 10"));
+        assertThrows(DataIntegrityViolationException.class,
+                () -> jdbcTemplate.update("UPDATE season_players SET removed_by = 999 WHERE id = 10"));
+        assertThrows(DataIntegrityViolationException.class,
+                () -> jdbcTemplate.update("UPDATE season_players SET removed_at = CURRENT_TIMESTAMP, removed_by = 0 WHERE id = 10"));
+        jdbcTemplate.update("UPDATE season_players SET removed_at = CURRENT_TIMESTAMP, removed_by = 999 WHERE id = 10");
+        assertEquals(999L, jdbcTemplate.queryForObject("SELECT removed_by FROM season_players WHERE id = 10", Long.class));
     }
 
     private void insertSeasonAndPlayerFixture() {

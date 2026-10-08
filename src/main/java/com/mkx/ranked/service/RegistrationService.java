@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Locale;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -36,6 +37,7 @@ public class RegistrationService {
 
     @Transactional(readOnly = true)
     public boolean isRegistered(long discordId) {
+        // An excluded player still has a registration and opens the read-only /ranked menu.
         validateDiscordId(discordId);
         SeasonEntity season = seasonService.getActiveSeasonEntity();
         return playerRepository.findByDiscordId(discordId)
@@ -62,9 +64,11 @@ public class RegistrationService {
         SeasonEntity season = seasonService.getActiveSeasonEntityForReadLock();
 
         Optional<PlayerEntity> existingPlayer = playerRepository.findByDiscordId(discordId);
-        if (existingPlayer.isPresent()
-                && seasonPlayerRepository.existsBySeasonAndPlayer(season, existingPlayer.get())) {
-            throw new BusinessException("You are already registered in the current season.");
+        if (existingPlayer.isPresent()) {
+            seasonPlayerRepository.findBySeasonAndPlayer(season, existingPlayer.get()).ifPresent(participant -> {
+                participant.requireParticipationAllowed();
+                throw new BusinessException("You are already registered in the current season.");
+            });
         }
         if (seasonPlayerRepository.existsBySeasonAndDisplayNameIgnoreCase(season, displayName)) {
             throw new BusinessException(
@@ -106,8 +110,11 @@ public class RegistrationService {
         SeasonEntity season = seasonService.getActiveSeasonEntityForReadLock();
         PlayerEntity player = playerRepository.findByDiscordId(discordId)
                 .orElseThrow(() -> new PlayerNotFoundException(discordId));
-        SeasonPlayerEntity seasonPlayer = seasonPlayerRepository.findBySeasonAndPlayer(season, player)
+        SeasonPlayerEntity seasonPlayer = seasonPlayerRepository
+                .findAllBySeasonAndPlayerInForUpdate(season, List.of(player))
+                .stream().findFirst()
                 .orElseThrow(() -> new PlayerNotRegisteredException(discordId));
+        seasonPlayer.requireParticipationAllowed();
 
         if (!seasonPlayer.getDisplayName().equalsIgnoreCase(displayName)
                 && seasonPlayerRepository.existsBySeasonAndDisplayNameIgnoreCase(season, displayName)) {

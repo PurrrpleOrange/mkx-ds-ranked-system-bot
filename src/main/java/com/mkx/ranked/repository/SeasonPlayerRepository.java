@@ -68,13 +68,15 @@ public interface SeasonPlayerRepository
             String displayName
     );
 
-    long countBySeason(SeasonEntity season);
+    @Query("select count(sp) from SeasonPlayerEntity sp where sp.season = :season and sp.removedAt is null")
+    long countBySeason(@Param("season") SeasonEntity season);
 
     @Query("""
             select sp
             from SeasonPlayerEntity sp
             join fetch sp.player
             where sp.season = :season
+              and sp.removedAt is null
             order by lower(sp.displayName) asc, sp.player.id asc
             """)
     List<SeasonPlayerEntity> findAllRegisteredBySeason(@Param("season") SeasonEntity season);
@@ -84,6 +86,7 @@ public interface SeasonPlayerRepository
             from SeasonPlayerEntity sp
             join fetch sp.player
             where sp.season = :season
+              and sp.removedAt is null
               and sp.gamesPlayed > 0
             order by sp.rating desc, sp.gamesPlayed desc, sp.player.id asc
             """)
@@ -94,6 +97,7 @@ public interface SeasonPlayerRepository
             from SeasonPlayerEntity sp
             join fetch sp.player
             where sp.season = :season
+              and sp.removedAt is null
               and sp.finalRank is not null
             order by sp.finalRank asc
             """)
@@ -105,6 +109,7 @@ public interface SeasonPlayerRepository
                     from SeasonPlayerEntity sp
                     join fetch sp.player
                     where sp.season = :season
+                      and sp.removedAt is null
                       and sp.gamesPlayed > 0
                     order by sp.rating desc, sp.gamesPlayed desc, sp.player.id asc
                     """,
@@ -112,6 +117,7 @@ public interface SeasonPlayerRepository
                     select count(sp)
                     from SeasonPlayerEntity sp
                     where sp.season = :season
+                      and sp.removedAt is null
                       and sp.gamesPlayed > 0
                     """
     )
@@ -120,13 +126,18 @@ public interface SeasonPlayerRepository
             Pageable pageable
     );
 
+    @Query("select sp from SeasonPlayerEntity sp where sp.season = :season and sp.removedAt is null")
     Page<SeasonPlayerEntity> findAllBySeason(
-            SeasonEntity season,
+            @Param("season") SeasonEntity season,
             Pageable pageable
     );
 
+    @Query("""
+            select count(sp) from SeasonPlayerEntity sp
+            where sp.season = :season and sp.rating > :rating and sp.removedAt is null
+            """)
     long countBySeasonAndRatingGreaterThan(
-            SeasonEntity season,
-            Integer rating
+            @Param("season") SeasonEntity season,
+            @Param("rating") Integer rating
     );
 }

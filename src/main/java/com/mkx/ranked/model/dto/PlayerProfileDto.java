@@ -1,5 +1,7 @@
 package com.mkx.ranked.model.dto;
 
+import java.time.LocalDateTime;
+
 public record PlayerProfileDto(
         long playerId,
         Long discordId,
@@ -9,6 +11,11 @@ public record PlayerProfileDto(
         Integer rank,
         String tierName,
         String tierEmoji,
-        SeasonDto season
+        SeasonDto season,
+        LocalDateTime removedAt,
+        Long removedBy
 ) {
+    public boolean removed() {
+        return removedAt != null;
+    }
 }

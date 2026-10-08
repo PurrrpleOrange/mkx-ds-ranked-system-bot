@@ -1,6 +1,9 @@
 package com.mkx.ranked.model;
 
+import com.mkx.ranked.exception.PlayerRemovedFromSeasonException;
 import jakarta.persistence.*;
+
+import java.time.LocalDateTime;
 
 /**
  * Сущность участия игрока в конкретном рейтинговом сезоне.
@@ -70,6 +73,41 @@ public class SeasonPlayerEntity {
      */
     @Column(name = "final_rank")
     private Integer finalRank;
+
+    @Column(name = "removed_at")
+    private LocalDateTime removedAt;
+
+    /** Discord ID администратора, исключившего игрока; регистрация администратора не требуется. */
+    @Column(name = "removed_by")
+    private Long removedBy;
+
+    public LocalDateTime getRemovedAt() {
+        return removedAt;
+    }
+
+    public Long getRemovedBy() {
+        return removedBy;
+    }
+
+    public boolean isRemoved() {
+        return removedAt != null;
+    }
+
+    public void requireParticipationAllowed() {
+        if (isRemoved()) {
+            throw new PlayerRemovedFromSeasonException(player.getDiscordId(), removedBy);
+        }
+    }
+
+    public void removeFromSeason(long administratorDiscordId) {
+        requireParticipationAllowed();
+        if (administratorDiscordId <= 0) {
+            throw new IllegalArgumentException("Discord ID администратора должен быть положительным.");
+        }
+        removedAt = LocalDateTime.now();
+        removedBy = administratorDiscordId;
+        finalRank = null;
+    }
 
     /**
      * Конструктор без параметров, необходимый JPA.

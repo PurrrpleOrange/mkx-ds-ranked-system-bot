@@ -1,5 +1,6 @@
 package com.mkx.ranked.discord.formatter;
 
+import com.mkx.ranked.model.dto.PlayerProfileDto;
 import com.mkx.ranked.model.dto.AdminMatchDto;
 import com.mkx.ranked.model.dto.AdminPlayerDto;
 import com.mkx.ranked.model.dto.AdminRegisteredPlayerDto;
@@ -74,6 +75,7 @@ public class AdminMessageFormatter {
                 .setDescription("""
                         **Вывести всех зарегистрированных игроков** — показать всех участников ACTIVE сезона, включая игроков без матчей.
                         **Посмотреть статистику игрока** — выбрать Discord-пользователя и показать профиль текущего ACTIVE сезона: рейтинг, игры, место и дивизион.
+                        **Удалить игрока из сезона** — исключить игрока с подтверждением. Матчи и рейтинг соперников сохраняются.
                         """)
                 .build();
     }
@@ -180,9 +182,11 @@ public class AdminMessageFormatter {
     }
 
     public MessageEmbed playerInfo(AdminPlayerDto player) {
-        String rank = player.rank() == null ? "Без ранга" : "#" + player.rank();
+        String rank = player.removedBy() != null ? "Не участвует" : player.rank() == null ? "Без ранга" : "#" + player.rank();
         return new EmbedBuilder()
                 .setTitle("Игрок " + player.displayName())
+                .setDescription(player.removedBy() == null ? null
+                        : "Удалён из текущего сезона пользователем <@%d>.".formatted(player.removedBy()))
                 .setColor(INFORMATION_COLOR)
                 .addField("Internal player ID", String.valueOf(player.playerId()), true)
                 .addField("Сезон", "#" + player.seasonNumber(), true)
@@ -192,6 +196,21 @@ public class AdminMessageFormatter {
                 .addField("Игр", String.valueOf(player.gamesPlayed()), true)
                 .addField("Место", rank, true)
                 .addField("Дивизион", player.tierEmoji() + " " + player.tierName(), true)
+                .build();
+    }
+
+    public MessageEmbed playerRemovalConfirmation(PlayerProfileDto player) {
+        return new EmbedBuilder()
+                .setTitle("Удаление игрока из сезона")
+                .setColor(Color.ORANGE)
+                .setDescription("""
+                        Удалить **%s** (<@%d>) из сезона **#%d — %s**?
+
+                        Игрок исчезнет из рейтинга и списка участников и больше не сможет участвовать
+                        или повторно зарегистрироваться в этом сезоне. Просмотр статистики останется доступен.
+                        Все сыгранные матчи, очки рейтинга и число игр соперников сохранятся.
+                        """.formatted(player.displayName(), player.discordId(),
+                        player.season().seasonNumber(), player.season().name()))
                 .build();
     }
 

@@ -10,6 +10,7 @@ public record AdminPlayerDto(
         Integer rank,
         String tierName,
         String tierEmoji,
-        int seasonNumber
+        int seasonNumber,
+        Long removedBy
 ) {
 }
